@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.zhaohang1205.horae-tasks",
+  "name": "Horae Tasks & Pomodoro",
+  "version": "1.0.0",
+  "author": "alex zhao",
+  "license": "MIT",
+  "description": "Upcoming and overdue GTD tasks with Pomodoro controls for the Omarchy bar.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Horae Tasks & Pomodoro",
+    "description": "Upcoming and overdue GTD tasks with Pomodoro controls",
+    "category": "Productivity",
+    "aliases": [
+      "horae",
+      "tasks",
+      "pomodoro",
+      "gtd",
+      "todo"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "center"
+  }
+}
