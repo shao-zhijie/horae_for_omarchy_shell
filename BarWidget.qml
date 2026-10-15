@@ -57,7 +57,6 @@ BarWidget {
     if (displayTasks.length > 0 && selectedTaskId === "") {
       selectedTaskId = String(displayTasks[0].id)
     }
-    Qt.callLater(captureField.forceActiveFocus)
   }
 
   function close() {
@@ -73,50 +72,26 @@ BarWidget {
     close()
   }
 
+  // Launch Horae in flash capture mode (horae --flash) inside a floating terminal
+  function launchFlashCapture() {
+    if (!bar) return
+    var fullCmd = ["omarchy-launch-tui", "--app-id=org.omarchy.terminal"].concat(command(["--flash"]))
+    bar.run(fullCmd.map(shellArg).join(" "))
+    popupOpen = false
+  }
+
+  // Launch or focus full Horae TUI
+  function openTui() {
+    if (!bar) return
+    bar.run("omarchy-launch-or-focus-tui horae")
+    popupOpen = false
+  }
+
   property var tasks: []
   property var displayTasks: []
   property var pomo: ({})
   property string selectedTaskId: ""
   property bool popupOpen: false
-  property string captureInputText: ""
-
-  // Slot hints calculation: reacts live to what the user types in capture input
-  readonly property var activeSlotHints: {
-    var text = captureInputText || ""
-    var words = text.trim().split(/\s+/)
-    var hasTag = false
-    var hasTime = false
-    var hasRrule = false
-    var hasPriority = false
-
-    for (var i = 0; i < words.length; i++) {
-      var w = words[i]
-      if (w.length <= 1) continue
-      var first = w.charAt(0)
-      if (first === "@" || first === "＠") hasTag = true
-      else if (first === "~" || first === "～" || first === "〜") hasTime = true
-      else if (first === "*" || first === "＊" || first === "×") hasRrule = true
-      else if (first === "!" || first === "！") hasPriority = true
-      else if (/^\d{1,2}:\d{2}$/.test(w)) hasTime = true
-    }
-
-    var slots = []
-    if (!hasRrule) slots.push({ key: "rrule", prefix: "*", label: isChinese ? "*周期" : "*rrule" })
-    if (!hasTime) slots.push({ key: "time", prefix: "~", label: isChinese ? "~时间" : "~time" })
-    if (!hasPriority) slots.push({ key: "priority", prefix: "!", label: isChinese ? "!优先级" : "!priority" })
-    if (!hasTag) slots.push({ key: "tag", prefix: "@", label: isChinese ? "@标签" : "@tag" })
-    return slots
-  }
-
-  function submitCapture() {
-    var text = captureField.text.trim()
-    if (text === "") return
-    if (bar) bar.run(command(["capture", text]).map(shellArg).join(" "))
-    captureField.text = ""
-    captureInputText = ""
-    refreshTimer.restart()
-    pomoRefreshTimer.restart()
-  }
 
   readonly property bool pomoRunning: String(pomo.class || "idle") !== "idle"
   readonly property bool pomoWorking: String(pomo.class || "") === "work"
@@ -330,10 +305,10 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    // Quick Capture Entry Button on Bar
+    // Quick Capture Entry Button on Bar: triggers horae --flash
     Item {
       id: addBtnItem
-      implicitWidth: addBtnText.implicitWidth + Style.space(8)
+      implicitWidth: addBtnText.implicitWidth + Style.space(10)
       implicitHeight: root.barSize
 
       Text {
@@ -351,12 +326,8 @@ BarWidget {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-          root.selectedTaskId = ""
-          root.popupOpen = true
-          Qt.callLater(captureField.forceActiveFocus)
-        }
-        onEntered: if (root.bar) root.bar.showTooltip(root, root.i18n("收集新待办 (+)", "Capture new task (+)"))
+        onClicked: root.launchFlashCapture()
+        onEntered: if (root.bar) root.bar.showTooltip(root, root.i18n("快速闪念录入 (horae --flash)", "Flash capture (horae --flash)"))
         onExited: if (root.bar) root.bar.hideTooltip(root)
       }
     }
@@ -405,8 +376,7 @@ BarWidget {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: function(mouse) {
-          if (mouse.button === Qt.RightButton && root.bar)
-            root.bar.run("omarchy-launch-or-focus-tui horae")
+          if (mouse.button === Qt.RightButton) root.openTui()
         }
         onDoubleClicked: function(mouse) {
           if (mouse.button === Qt.LeftButton) root.stopPomo()
@@ -496,107 +466,13 @@ BarWidget {
     bar: root.bar
     owner: root
     open: root.popupOpen
-    contentWidth: popup.fittedContentWidth(Style.space(440))
+    contentWidth: popup.fittedContentWidth(Style.space(420))
     contentHeight: popup.fittedContentHeight(popupContent.implicitHeight)
 
     Column {
       id: popupContent
       anchors.fill: parent
       spacing: Style.space(12)
-
-      // --- Quick Capture Section with Live Slot Hints ---
-      Column {
-        width: parent.width
-        spacing: Style.space(8)
-
-        Row {
-          width: parent.width
-          spacing: Style.space(8)
-
-          TextField {
-            id: captureField
-            width: parent.width - addBtn.width - Style.space(8)
-            placeholderText: root.i18n("收集待办 (例如: 买菜 ~18:00 @生活 !high)...", "Capture task (e.g. Buy milk ~18:00 @home !high)...")
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            foreground: root.fg
-            accent: root.accent
-            onTextChanged: root.captureInputText = text
-            onAccepted: root.submitCapture()
-          }
-
-          Button {
-            id: addBtn
-            text: root.i18n("收集", "Add")
-            foreground: root.fg
-            accent: root.accent
-            fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
-            bordered: true
-            onClicked: root.submitCapture()
-          }
-        }
-
-        // Live Slot Hints (卡槽提示)
-        Row {
-          width: parent.width
-          spacing: Style.space(6)
-          visible: root.activeSlotHints.length > 0
-
-          Text {
-            text: root.i18n("卡槽提示:", "Slots:")
-            color: root.textColor
-            opacity: 0.6
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            anchors.verticalCenter: parent.verticalCenter
-          }
-
-          Repeater {
-            model: root.activeSlotHints
-            delegate: Item {
-              id: slotDelegate
-              property var slot: modelData
-              implicitWidth: slotLabel.implicitWidth + Style.space(12)
-              implicitHeight: Style.space(22)
-
-              Rectangle {
-                anchors.fill: parent
-                radius: Style.cornerRadius
-                color: slotMouse.containsMouse ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.2) : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.08)
-                border.color: slotMouse.containsMouse ? root.accent : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.25)
-                border.width: 1
-              }
-
-              Text {
-                id: slotLabel
-                anchors.centerIn: parent
-                text: slotDelegate.slot.label
-                color: slotMouse.containsMouse ? root.accent : root.fg
-                opacity: slotMouse.containsMouse ? 1.0 : 0.75
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
-
-              MouseArea {
-                id: slotMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                  var cur = captureField.text
-                  var sep = (cur.length > 0 && !cur.endsWith(" ")) ? " " : ""
-                  captureField.text = cur + sep + slotDelegate.slot.prefix
-                  captureField.cursorPosition = captureField.text.length
-                  captureField.forceActiveFocus()
-                }
-              }
-            }
-          }
-        }
-      }
-
-      PanelSeparator { foreground: root.fg }
 
       // --- Selected Task Details Section ---
       Column {
@@ -680,7 +556,7 @@ BarWidget {
         }
       }
 
-      // If no task is selected (e.g. opened via + button), show Upcoming Tasks list
+      // If no task is selected, show Upcoming Tasks list
       Column {
         width: parent.width
         spacing: Style.space(6)
@@ -737,6 +613,33 @@ BarWidget {
               onClicked: root.openPopupFor(taskData)
             }
           }
+        }
+      }
+
+      PanelSeparator { foreground: root.fg }
+
+      // --- Bottom Quick Actions Row ---
+      Row {
+        width: parent.width
+        spacing: Style.space(8)
+
+        Button {
+          text: root.i18n("+ 闪念录入", "+ Flash capture")
+          foreground: root.fg
+          accent: root.accent
+          fontFamily: root.fontFamily
+          fontSize: Style.font.bodySmall
+          bordered: true
+          onClicked: root.launchFlashCapture()
+        }
+
+        Button {
+          text: root.i18n("打开 TUI", "Open TUI")
+          foreground: root.fg
+          fontFamily: root.fontFamily
+          fontSize: Style.font.bodySmall
+          bordered: true
+          onClicked: root.openTui()
         }
       }
     }

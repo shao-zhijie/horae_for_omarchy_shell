@@ -8,13 +8,16 @@ An [Omarchy](https://omarchy.org/) Quattro shell bar widget that brings upcoming
 
 ## Features
 
+- **Quick Flash Capture (`+`)**: Click the `+` icon on the bar to launch Horae's native flash capture mode (`horae --flash`) in a floating terminal. Enjoy full terminal syntax highlighting, dynamic slot hints (`[*rrule] [~time] [!priority] [@tag]`), and tag completion. Type your task and press Enter to save and exit immediately!
 - **Live GTD Task Stream**: Shows your upcoming and overdue tasks calculated directly by Horae.
 - **Active Focus Indicator**: When a Pomodoro is running, the active task is pinned to the front with 🍅 and a live pulse/countdown.
-- **Quick Action Popup**: Click any task to inspect details and perform one-click actions:
+- **Quick Action Popup**: Click any task on the status bar to inspect details and perform one-click actions:
   - 🍅 **Start Pomodoro**: Focus on this task immediately.
   - ⏱️ **+1h Delay**: Push the schedule back by one hour.
   - ✅ **Done**: Mark task completed (stops active Pomodoro automatically).
   - 📦 **Archive**: Soft-delete the task into archive.
+  - ⚡ **+ Flash Capture**: Quick button inside the card to trigger `horae --flash`.
+  - 🖥️ **Open TUI**: Open the full Horae TUI dashboard.
 - **Smooth Marquee Scroll**: Long titles neatly fit the bar and scroll smoothly on hover.
 - **TUI Integration**: Right-click the Pomodoro indicator to summon or focus the Horae TUI (`omarchy-launch-or-focus-tui horae`); double-click to stop Pomodoro.
 - **Bilingual Interface**: Automatically detects system locale for Chinese / English UI, or configurable via settings.
@@ -63,7 +66,7 @@ Settings can be specified in `~/.config/omarchy/shell.json` under the widget ent
 | `limit` | number | `10` | Task query candidate limit |
 | `displayMax` | number | `2` | Number of simultaneous tasks displayed on bar |
 | `maxWidth` | number | `420` | Maximum width in logical pixels |
-| `alwaysShow` | boolean | `false` | Keep bar widget visible even when no tasks are due |
+| `alwaysShow` | boolean | `true` | Keep bar widget visible with `+` capture button even when idle |
 | `textColor` | string | `""` | Custom text color (falls back to bar foreground) |
 | `lang` | string | `""` | Language override (`"en"` or `"zh"`, defaults to system locale) |
 
