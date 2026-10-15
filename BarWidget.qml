@@ -33,7 +33,7 @@ BarWidget {
     return c && String(c).trim() !== "" ? c : fg
   }
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property bool alwaysShow: Boolean(setting("alwaysShow", false))
+  readonly property bool alwaysShow: Boolean(setting("alwaysShow", true))
 
   // Localization helper: auto-detect locale or override with setting("lang", "zh" | "en")
   readonly property bool isChinese: {
@@ -53,9 +53,11 @@ BarWidget {
   readonly property bool popoutSwitchClosing: false
 
   function open() {
-    if (displayTasks.length > 0) {
-      openPopupFor(displayTasks[0])
+    popupOpen = true
+    if (displayTasks.length > 0 && selectedTaskId === "") {
+      selectedTaskId = String(displayTasks[0].id)
     }
+    Qt.callLater(captureField.forceActiveFocus)
   }
 
   function close() {
@@ -76,6 +78,45 @@ BarWidget {
   property var pomo: ({})
   property string selectedTaskId: ""
   property bool popupOpen: false
+  property string captureInputText: ""
+
+  // Slot hints calculation: reacts live to what the user types in capture input
+  readonly property var activeSlotHints: {
+    var text = captureInputText || ""
+    var words = text.trim().split(/\s+/)
+    var hasTag = false
+    var hasTime = false
+    var hasRrule = false
+    var hasPriority = false
+
+    for (var i = 0; i < words.length; i++) {
+      var w = words[i]
+      if (w.length <= 1) continue
+      var first = w.charAt(0)
+      if (first === "@" || first === "＠") hasTag = true
+      else if (first === "~" || first === "～" || first === "〜") hasTime = true
+      else if (first === "*" || first === "＊" || first === "×") hasRrule = true
+      else if (first === "!" || first === "！") hasPriority = true
+      else if (/^\d{1,2}:\d{2}$/.test(w)) hasTime = true
+    }
+
+    var slots = []
+    if (!hasRrule) slots.push({ key: "rrule", prefix: "*", label: isChinese ? "*周期" : "*rrule" })
+    if (!hasTime) slots.push({ key: "time", prefix: "~", label: isChinese ? "~时间" : "~time" })
+    if (!hasPriority) slots.push({ key: "priority", prefix: "!", label: isChinese ? "!优先级" : "!priority" })
+    if (!hasTag) slots.push({ key: "tag", prefix: "@", label: isChinese ? "@标签" : "@tag" })
+    return slots
+  }
+
+  function submitCapture() {
+    var text = captureField.text.trim()
+    if (text === "") return
+    if (bar) bar.run(command(["capture", text]).map(shellArg).join(" "))
+    captureField.text = ""
+    captureInputText = ""
+    refreshTimer.restart()
+    pomoRefreshTimer.restart()
+  }
 
   readonly property bool pomoRunning: String(pomo.class || "idle") !== "idle"
   readonly property bool pomoWorking: String(pomo.class || "") === "work"
@@ -86,9 +127,8 @@ BarWidget {
     return null
   })()
 
-  onSelectedTaskChanged: if (root.popupOpen && !root.selectedTask) root.popupOpen = false
   readonly property int taskSlotWidth: displayTasks.length === 0 ? 0
-    : Math.max(48, Math.floor((maxBarWidth - Style.space(80)) / displayTasks.length))
+    : Math.max(48, Math.floor((maxBarWidth - Style.space(90)) / displayTasks.length))
 
   visible: alwaysShow || displayTasks.length > 0 || pomoRunning
   implicitWidth: Math.min(row.implicitWidth, maxBarWidth) + Style.space(12)
@@ -109,7 +149,6 @@ BarWidget {
     return status !== "done" && status !== "archived"
   }
 
-  // Determine urgency class from task metadata
   function taskClass(task) {
     if (task && task.class) return String(task.class)
     var due = taskTime(task)
@@ -291,6 +330,37 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
+    // Quick Capture Entry Button on Bar
+    Item {
+      id: addBtnItem
+      implicitWidth: addBtnText.implicitWidth + Style.space(8)
+      implicitHeight: root.barSize
+
+      Text {
+        id: addBtnText
+        anchors.centerIn: parent
+        text: "+"
+        color: addMouse.containsMouse ? root.accent : root.textColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+        font.bold: true
+      }
+
+      MouseArea {
+        id: addMouse
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: {
+          root.selectedTaskId = ""
+          root.popupOpen = true
+          Qt.callLater(captureField.forceActiveFocus)
+        }
+        onEntered: if (root.bar) root.bar.showTooltip(root, root.i18n("收集新待办 (+)", "Capture new task (+)"))
+        onExited: if (root.bar) root.bar.hideTooltip(root)
+      }
+    }
+
     Repeater {
       model: root.displayTasks
       delegate: taskDelegate
@@ -426,7 +496,7 @@ BarWidget {
     bar: root.bar
     owner: root
     open: root.popupOpen
-    contentWidth: popup.fittedContentWidth(Style.space(420))
+    contentWidth: popup.fittedContentWidth(Style.space(440))
     contentHeight: popup.fittedContentHeight(popupContent.implicitHeight)
 
     Column {
@@ -434,80 +504,239 @@ BarWidget {
       anchors.fill: parent
       spacing: Style.space(12)
 
-      Text {
-        width: parent.width
-        text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + root.selectedTask.title : ""
-        color: root.fg
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.title
-        font.bold: true
-        elide: Text.ElideRight
-      }
-
+      // --- Quick Capture Section with Live Slot Hints ---
       Column {
         width: parent.width
-        spacing: Style.spacing.labelGap
-        Text {
-          text: root.selectedTask ? root.i18n("状态    ", "Status  ") + root.taskStatus(root.selectedTask) : ""
-          color: root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-        }
-        Text {
-          text: root.selectedTask ? root.i18n("截止    ", "Due     ") + root.formatDue(root.taskTime(root.selectedTask)) : ""
-          color: root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-        }
-        Text {
-          text: root.selectedTask ? root.i18n("标签    ", "Tags    ") + String(root.selectedTask.tags || "-") : ""
-          color: root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          elide: Text.ElideRight
+        spacing: Style.space(8)
+
+        Row {
           width: parent.width
+          spacing: Style.space(8)
+
+          TextField {
+            id: captureField
+            width: parent.width - addBtn.width - Style.space(8)
+            placeholderText: root.i18n("收集待办 (例如: 买菜 ~18:00 @生活 !high)...", "Capture task (e.g. Buy milk ~18:00 @home !high)...")
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            foreground: root.fg
+            accent: root.accent
+            onTextChanged: root.captureInputText = text
+            onAccepted: root.submitCapture()
+          }
+
+          Button {
+            id: addBtn
+            text: root.i18n("收集", "Add")
+            foreground: root.fg
+            accent: root.accent
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            bordered: true
+            onClicked: root.submitCapture()
+          }
+        }
+
+        // Live Slot Hints (卡槽提示)
+        Row {
+          width: parent.width
+          spacing: Style.space(6)
+          visible: root.activeSlotHints.length > 0
+
+          Text {
+            text: root.i18n("卡槽提示:", "Slots:")
+            color: root.textColor
+            opacity: 0.6
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          Repeater {
+            model: root.activeSlotHints
+            delegate: Item {
+              id: slotDelegate
+              property var slot: modelData
+              implicitWidth: slotLabel.implicitWidth + Style.space(12)
+              implicitHeight: Style.space(22)
+
+              Rectangle {
+                anchors.fill: parent
+                radius: Style.cornerRadius
+                color: slotMouse.containsMouse ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.2) : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.08)
+                border.color: slotMouse.containsMouse ? root.accent : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.25)
+                border.width: 1
+              }
+
+              Text {
+                id: slotLabel
+                anchors.centerIn: parent
+                text: slotDelegate.slot.label
+                color: slotMouse.containsMouse ? root.accent : root.fg
+                opacity: slotMouse.containsMouse ? 1.0 : 0.75
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MouseArea {
+                id: slotMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                  var cur = captureField.text
+                  var sep = (cur.length > 0 && !cur.endsWith(" ")) ? " " : ""
+                  captureField.text = cur + sep + slotDelegate.slot.prefix
+                  captureField.cursorPosition = captureField.text.length
+                  captureField.forceActiveFocus()
+                }
+              }
+            }
+          }
         }
       }
 
       PanelSeparator { foreground: root.fg }
 
-      Row {
+      // --- Selected Task Details Section ---
+      Column {
         width: parent.width
-        spacing: Style.space(8)
-        Button {
-          text: root.i18n("开启番茄钟", "Pomodoro")
-          foreground: root.fg
-          accent: root.urgent
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          bordered: true
-          onClicked: root.startSelected()
+        spacing: Style.space(10)
+        visible: root.selectedTask !== null
+
+        Text {
+          width: parent.width
+          text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + root.selectedTask.title : ""
+          color: root.fg
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.title
+          font.bold: true
+          elide: Text.ElideRight
         }
-        Button {
-          text: root.i18n("延迟 1h", "+1h Delay")
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          bordered: true
-          onClicked: root.deferSelected()
+
+        Column {
+          width: parent.width
+          spacing: Style.spacing.labelGap
+          Text {
+            text: root.selectedTask ? root.i18n("状态    ", "Status  ") + root.taskStatus(root.selectedTask) : ""
+            color: root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+          Text {
+            text: root.selectedTask ? root.i18n("截止    ", "Due     ") + root.formatDue(root.taskTime(root.selectedTask)) : ""
+            color: root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+          Text {
+            text: root.selectedTask ? root.i18n("标签    ", "Tags    ") + String(root.selectedTask.tags || "-") : ""
+            color: root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            elide: Text.ElideRight
+            width: parent.width
+          }
         }
-        Button {
-          text: root.i18n("完成", "Done")
-          foreground: root.fg
-          accent: root.accent
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          bordered: true
-          onClicked: root.completeSelected()
+
+        Row {
+          width: parent.width
+          spacing: Style.space(8)
+          Button {
+            text: root.i18n("开启番茄钟", "Pomodoro")
+            foreground: root.fg
+            accent: root.urgent
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            bordered: true
+            onClicked: root.startSelected()
+          }
+          Button {
+            text: root.i18n("延迟 1h", "+1h Delay")
+            foreground: root.fg
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            bordered: true
+            onClicked: root.deferSelected()
+          }
+          Button {
+            text: root.i18n("完成", "Done")
+            foreground: root.fg
+            accent: root.accent
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            bordered: true
+            onClicked: root.completeSelected()
+          }
+          Button {
+            text: root.i18n("归档", "Archive")
+            foreground: root.fg
+            accent: root.urgent
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            bordered: true
+            onClicked: root.archiveSelected()
+          }
         }
-        Button {
-          text: root.i18n("归档", "Archive")
-          foreground: root.fg
-          accent: root.urgent
-          fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
-          bordered: true
-          onClicked: root.archiveSelected()
+      }
+
+      // If no task is selected (e.g. opened via + button), show Upcoming Tasks list
+      Column {
+        width: parent.width
+        spacing: Style.space(6)
+        visible: root.selectedTask === null && root.displayTasks.length > 0
+
+        Text {
+          text: root.i18n("即将到期 / 逾期任务:", "Upcoming / Overdue Tasks:")
+          color: root.textColor
+          opacity: 0.7
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+
+        Repeater {
+          model: root.displayTasks
+          delegate: Item {
+            property var taskData: modelData
+            width: popupContent.width
+            implicitHeight: Style.space(26)
+
+            Row {
+              anchors.fill: parent
+              spacing: Style.space(8)
+              Text {
+                text: root.taskIcon(taskData)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                text: String(taskData.title || "")
+                color: root.isUrgent(taskData) ? root.urgent : root.fg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                elide: Text.ElideRight
+                width: parent.width - Style.space(120)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+              Text {
+                text: root.formatDueTime(root.taskTime(taskData))
+                color: root.textColor
+                opacity: 0.6
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openPopupFor(taskData)
+            }
+          }
         }
       }
     }
@@ -547,10 +776,6 @@ BarWidget {
   }
 
   // Event-driven refresh: watch the files horae itself writes.
-  // - pomo.json changes on start/stop/phase transitions.
-  // - horae.db is touched whenever tasks change.
-  // - When a pomodoro is running, pomoTickTimer refreshes every second for live countdown.
-  // - A slow 60s timer still catches time-based transitions and acts as a fallback.
   FileView {
     id: pomoWatcher
     path: root.dataDir + "/pomo.json"
