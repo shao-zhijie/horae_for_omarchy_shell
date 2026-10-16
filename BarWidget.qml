@@ -206,6 +206,13 @@ BarWidget {
   implicitWidth: Math.min(row.implicitWidth, maxBarWidth) + Style.space(12)
   implicitHeight: barSize
 
+  readonly property bool revealPrivacyBtn: widgetHover.hovered || (privacyBtnItem && privacyBtnItem.hovering) || (pomoItem && pomoItem.hovering) || root.popupOpen
+  readonly property bool revealPomoItem: pomoRunning || displayTasks.length === 0 || widgetHover.hovered || (pomoItem && pomoItem.hovering) || (privacyBtnItem && privacyBtnItem.hovering) || root.popupOpen
+
+  HoverHandler {
+    id: widgetHover
+  }
+
   function command(args) {
     var result = [horaeBin]
     if (profile !== "") result.push("--profile", profile)
@@ -436,29 +443,45 @@ BarWidget {
     anchors.centerIn: parent
     spacing: Style.space(6)
 
-    // Quick Capture Entry Button on Bar: triggers horae --flash
+    // Privacy Mode Toggle Button on Bar (revealed on hover)
     Item {
-      id: addBtnItem
-      implicitWidth: addBtnText.implicitWidth + Style.space(10)
+      id: privacyBtnItem
+      readonly property bool hovering: privacyMouse.containsMouse
+      readonly property real targetWidth: privacyBtnText.implicitWidth + Style.space(8)
+      implicitWidth: root.revealPrivacyBtn ? targetWidth : 0
+      width: implicitWidth
       implicitHeight: root.barSize
+      visible: width > 0.5
+      clip: true
+      opacity: root.revealPrivacyBtn ? 1.0 : 0.0
+
+      Behavior on implicitWidth {
+        NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+      }
+      Behavior on opacity {
+        NumberAnimation { duration: 160 }
+      }
 
       Text {
-        id: addBtnText
+        id: privacyBtnText
         anchors.centerIn: parent
-        text: "+"
-        color: addMouse.containsMouse ? root.accent : root.textColor
+        text: root.privacyMode ? "󰈉" : "󰈈"
+        color: privacyMouse.containsMouse ? root.accent : root.textColor
+        opacity: root.privacyMode ? 1.0 : (privacyMouse.containsMouse ? 1.0 : 0.65)
         font.family: root.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: true
+        font.pixelSize: Style.font.bodySmall
+        renderType: Text.NativeRendering
       }
 
       MouseArea {
-        id: addMouse
+        id: privacyMouse
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.launchFlashCapture()
-        onEntered: if (root.bar) root.bar.showTooltip(root, root.i18n("快速闪念录入 (horae --flash)", "Flash capture (horae --flash)"))
+        onClicked: root.togglePrivacyMode()
+        onEntered: if (root.bar) root.bar.showTooltip(root, root.privacyMode ?
+          root.i18n("状态栏隐私模式: 开启 (点击关闭)", "Privacy Mode: ON (Click to turn off)") :
+          root.i18n("状态栏隐私模式: 关闭 (点击开启)", "Privacy Mode: OFF (Click to turn on)"))
         onExited: if (root.bar) root.bar.hideTooltip(root)
       }
     }
@@ -468,20 +491,50 @@ BarWidget {
       delegate: taskDelegate
     }
 
-    Text {
-      visible: root.displayTasks.length > 0
-      text: "│"
-      color: root.textColor
-      opacity: 0.3
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      anchors.verticalCenter: parent.verticalCenter
+    Item {
+      id: pomoSepItem
+      visible: root.displayTasks.length > 0 && width > 0.5
+      readonly property real targetWidth: pomoSepText.implicitWidth
+      implicitWidth: (root.displayTasks.length > 0 && root.revealPomoItem) ? targetWidth : 0
+      width: implicitWidth
+      implicitHeight: root.barSize
+      clip: true
+      opacity: (root.displayTasks.length > 0 && root.revealPomoItem) ? 0.3 : 0.0
+
+      Behavior on implicitWidth {
+        NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+      }
+      Behavior on opacity {
+        NumberAnimation { duration: 160 }
+      }
+
+      Text {
+        id: pomoSepText
+        anchors.centerIn: parent
+        text: "│"
+        color: root.textColor
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
     }
 
     Item {
       id: pomoItem
-      implicitWidth: pomoText.implicitWidth + Style.space(8)
+      readonly property bool hovering: pomoMouse.containsMouse
+      readonly property real targetWidth: pomoText.implicitWidth + Style.space(8)
+      implicitWidth: root.revealPomoItem ? targetWidth : 0
+      width: implicitWidth
       implicitHeight: root.barSize
+      visible: width > 0.5
+      clip: true
+      opacity: root.revealPomoItem ? 1.0 : 0.0
+
+      Behavior on implicitWidth {
+        NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+      }
+      Behavior on opacity {
+        NumberAnimation { duration: 160 }
+      }
 
       Text {
         id: pomoText
@@ -494,36 +547,44 @@ BarWidget {
         Behavior on color {
           ColorAnimation { duration: 200 }
         }
-      }
 
-      SequentialAnimation on opacity {
-        running: root.pomoWorking
-        loops: Animation.Infinite
-        NumberAnimation { from: 1.0; to: 0.5; duration: 800 }
-        NumberAnimation { from: 0.5; to: 1.0; duration: 800 }
+        SequentialAnimation on opacity {
+          running: root.pomoWorking
+          loops: Animation.Infinite
+          NumberAnimation { from: 1.0; to: 0.5; duration: 800 }
+          NumberAnimation { from: 0.5; to: 1.0; duration: 800 }
+        }
       }
 
       MouseArea {
+        id: pomoMouse
+        property double lastDoubleClickTime: 0
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
           if (mouse.button === Qt.LeftButton) {
-            root.showPomoSettings = true
-            root.open()
+            if (Date.now() - lastDoubleClickTime < 350) return
+            pomoClickTimer.restart()
           } else if (mouse.button === Qt.RightButton) {
+            pomoClickTimer.stop()
             root.openTui()
           }
         }
         onDoubleClicked: function(mouse) {
-          if (mouse.button === Qt.LeftButton) root.stopPomo()
+          if (mouse.button === Qt.LeftButton) {
+            lastDoubleClickTime = Date.now()
+            pomoClickTimer.stop()
+            root.stopPomo()
+          }
         }
         onEntered: if (root.bar) {
           var pTooltip = String(root.pomo.tooltip || "")
           if (root.privacyMode && root.pomo.title) {
             pTooltip = pTooltip.replace(String(root.pomo.title), root.maskTitle(root.pomo.title))
           }
-          root.bar.showTooltip(root, pTooltip !== "" ? pTooltip : root.i18n("番茄钟 (左击配置参数，右击打开 TUI，双击停止)", "Pomodoro (Left-click for settings, Right-click for TUI, Double-click to stop)"))
+          var pActionHint = root.i18n("左击快速录入，右击打开 TUI，双击停止", "Left-click: Quick capture, Right-click: TUI, Double-click: Stop")
+          root.bar.showTooltip(root, pTooltip !== "" ? (pTooltip + "\n" + pActionHint) : root.i18n("番茄钟 (左击快速录入，右击打开 TUI，双击停止)", "Pomodoro (Left-click for quick capture, Right-click for TUI, Double-click to stop)"))
         }
         onExited: if (root.bar) root.bar.hideTooltip(root)
       }
@@ -1048,12 +1109,15 @@ BarWidget {
             Button {
               width: Style.space(26)
               height: Style.space(22)
-              text: root.privacyMode ? "🔒" : "👁"
-              fontSize: Style.font.caption
+              text: root.privacyMode ? "󰈉" : "󰈈"
+              fontSize: Style.font.bodySmall
               horizontalPadding: 0
               bordered: true
               accent: root.privacyMode ? root.accent : root.fg
               opacity: root.privacyMode ? 1.0 : 0.6
+              tooltipText: root.privacyMode ?
+                root.i18n("关闭隐私模式", "Turn off Privacy Mode") :
+                root.i18n("开启隐私模式", "Turn on Privacy Mode")
               onClicked: root.togglePrivacyMode()
             }
 
@@ -1247,12 +1311,15 @@ BarWidget {
             Button {
               width: Style.space(26)
               height: Style.space(22)
-              text: root.privacyMode ? "🔒" : "👁"
-              fontSize: Style.font.caption
+              text: root.privacyMode ? "󰈉" : "󰈈"
+              fontSize: Style.font.bodySmall
               horizontalPadding: 0
               bordered: true
               accent: root.privacyMode ? root.accent : root.fg
               opacity: root.privacyMode ? 1.0 : 0.6
+              tooltipText: root.privacyMode ?
+                root.i18n("关闭隐私模式", "Turn off Privacy Mode") :
+                root.i18n("开启隐私模式", "Turn on Privacy Mode")
               onClicked: root.togglePrivacyMode()
             }
 
@@ -1474,5 +1541,12 @@ BarWidget {
     id: pomoRefreshTimer
     interval: 250
     onTriggered: root.refreshPomo()
+  }
+
+  Timer {
+    id: pomoClickTimer
+    interval: 250
+    repeat: false
+    onTriggered: root.launchFlashCapture()
   }
 }
