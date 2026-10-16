@@ -9,7 +9,14 @@ An [Omarchy](https://omarchy.org/) Quattro shell bar widget that brings upcoming
 ## Features
 
 - **Quick Flash Capture (`+`)**: Click the `+` icon on the bar to launch Horae's native flash capture mode (`horae --flash`) in a floating terminal. Enjoy full terminal syntax highlighting, dynamic slot hints (`[*rrule] [~time] [!priority] [@tag]`), and tag completion. Type your task and press Enter to save and exit immediately!
-- **Live GTD Task Stream**: Shows your upcoming and overdue tasks calculated directly by Horae.
+- **🔒 Privacy Mode**: One-click toggle for privacy masking (via the `👁` / `🔒` button on the panel or settings). When enabled, task titles and running Pomodoros on the bar only reveal their **first character** (for CJK, e.g. `铲…`) or **first word** (for English, e.g. `meeting…`), preventing sensitive tasks from being leaked during presentations, meetings, screen shares, or in public spaces.
+- **🍅 Pomodoro Parameter Config**: Configure your Pomodoro timer directly without entering the terminal. Left-click the `🍅` icon on the bar or click `⚙` on the panel to adjust:
+  - Focus work duration (default 25 mins, with 15m / 25m / 45m / 50m presets or custom stepper)
+  - Short break duration (default 5 mins, with 3m / 5m / 10m / 15m presets)
+  - Long break duration (default 15 mins, with 10m / 15m / 20m / 30m presets)
+  - Long break cycle interval (default 4 cycles, with 2 / 3 / 4 / 5 presets)
+  - Changes instantly update and sync to `~/.config/horae/pomo.json` across CLI, daemon, and TUI.
+- **Live GTD Task Stream**: Shows your upcoming and planned tasks calculated directly by Horae.
 - **Active Focus Indicator**: When a Pomodoro is running, the active task is pinned to the front with 🍅 and a live pulse/countdown.
 - **Quick Action Popup**: Click any task on the status bar to inspect details and perform one-click actions:
   - 🍅 **Start Pomodoro**: Focus on this task immediately.
@@ -17,10 +24,11 @@ An [Omarchy](https://omarchy.org/) Quattro shell bar widget that brings upcoming
   - ✅ **Done**: Mark task completed (stops active Pomodoro automatically).
   - 📦 **Archive**: Soft-delete the task into archive.
   - ⚡ **+ Flash Capture**: Quick button inside the card to trigger `horae --flash`.
+  - ⚙️ **Pomo Settings**: Switch directly to Pomodoro & widget settings.
   - 🖥️ **Open TUI**: Open the full Horae TUI dashboard.
 - **Smooth Marquee Scroll**: Long titles neatly fit the bar and scroll smoothly on hover.
-- **TUI Integration**: Right-click the Pomodoro indicator to summon or focus the Horae TUI (`omarchy-launch-or-focus-tui horae`); double-click to stop Pomodoro.
-- **Bilingual Interface**: Automatically detects system locale for Chinese / English UI, or configurable via settings.
+- **TUI Integration**: Left-click Pomodoro icon for settings; right-click to summon or focus the Horae TUI (`omarchy-launch-or-focus-tui horae`); double-click to stop Pomodoro.
+- **Bilingual Interface**: Seamless one-click sliding toggle for Chinese / English UI on the top-right corner.
 - **Event-Driven & Light**: Watches `horae.db` and `pomo.json` for zero-polling instant updates.
 
 ## Prerequisites
@@ -68,7 +76,21 @@ Settings can be specified in `~/.config/omarchy/shell.json` under the widget ent
 | `maxWidth` | number | `420` | Maximum width in logical pixels |
 | `alwaysShow` | boolean | `true` | Keep bar widget visible with `+` capture button even when idle |
 | `textColor` | string | `""` | Custom text color (falls back to bar foreground) |
+| `privacyMode` | boolean | `false` | Privacy mode (only reveal first character or word on bar) |
 | `lang` | string | `""` | Language override (`"en"` or `"zh"`, defaults to system locale) |
+
+## Recommended Window Rules (Hyprland Floating Modal)
+
+To have the flash capture window (`horae --flash`) launch as a sleek, centered floating modal dialog, add the following to `~/.config/hypr/hyprland.lua`:
+
+```lua
+-- Compact centered floating dialog for Horae flash capture
+o.window("^org\\.omarchy\\.horae-flash$", {
+	float = true,
+	center = true,
+	size = { 760, 360 },
+})
+```
 
 ## Shell Commands
 

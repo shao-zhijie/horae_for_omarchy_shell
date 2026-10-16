@@ -35,13 +35,109 @@ BarWidget {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property bool alwaysShow: Boolean(setting("alwaysShow", true))
 
-  // Localization helper: auto-detect locale or override with setting("lang", "zh" | "en")
-  readonly property bool isChinese: {
+  // Language management with toggle support and persistence
+  property string currentLang: {
     var l = String(setting("lang", "")).toLowerCase().trim()
-    if (l.indexOf("zh") === 0) return true
-    if (l.indexOf("en") === 0) return false
+    if (l.indexOf("zh") === 0) return "zh"
+    if (l.indexOf("en") === 0) return "en"
+    var horaeLang = (Quickshell.env("HORAE_LANG") || "").toLowerCase().trim()
+    if (horaeLang === "en") return "en"
+    if (horaeLang === "zh") return "zh"
     var env = (Quickshell.env("LANG") || "").toLowerCase()
-    return env.indexOf("zh") === 0
+    if (env.indexOf("zh") === 0) return "zh"
+    return "zh"
+  }
+
+  readonly property bool isChinese: currentLang === "zh"
+
+  function toggleLanguage() {
+    var next = currentLang === "zh" ? "en" : "zh"
+    currentLang = next
+    var sql = "INSERT INTO settings (key, val) VALUES ('lang', '" + next + "') ON CONFLICT(key) DO UPDATE SET val='" + next + "';"
+    var cmd = "sqlite3 " + shellArg(root.dataDir + "/horae.db") + " " + shellArg(sql)
+    if (bar) bar.run(cmd)
+    refreshTimer.restart()
+  }
+
+  // Privacy Mode: only expose first character (CJK) or first word (English)
+  property bool privacyMode: Boolean(setting("privacyMode", false))
+
+  function togglePrivacyMode() {
+    privacyMode = !privacyMode
+    var val = privacyMode ? "1" : "0"
+    var sql = "INSERT INTO settings (key, val) VALUES ('privacy_mode', '" + val + "') ON CONFLICT(key) DO UPDATE SET val='" + val + "';"
+    var cmd = "sqlite3 " + shellArg(root.dataDir + "/horae.db") + " " + shellArg(sql)
+    if (bar) bar.run(cmd)
+  }
+
+  function maskTitle(title) {
+    if (!title) return ""
+    var s = String(title).trim()
+    if (s.length === 0) return ""
+    var cjkMatch = s.match(/^([\u4e00-\u9fa5\u3400-\u4dbf\uf900-\ufaff])/);
+    if (cjkMatch) {
+      return s.length > 1 ? cjkMatch[1] + "…" : cjkMatch[1];
+    }
+    var prefixMatch = s.match(/^([^\w\s\u4e00-\u9fa5]+)?([\u4e00-\u9fa5]|\w+)/);
+    if (prefixMatch) {
+      var prefix = prefixMatch[1] || "";
+      var core = prefixMatch[2] || "";
+      var exposed = prefix + core;
+      return s.length > exposed.length ? exposed + "…" : exposed;
+    }
+    var wordMatch = s.match(/^(\S+)/);
+    if (wordMatch) {
+      var w = wordMatch[1];
+      return s.length > w.length ? w + "…" : w;
+    }
+    return s.charAt(0) + "…";
+  }
+
+  // Pomodoro Configuration state & helpers
+  property bool showPomoSettings: false
+  property int pomoWorkMins: 25
+  property int pomoShortBreakMins: 5
+  property int pomoLongBreakMins: 15
+  property int pomoLongBreakInterval: 4
+
+  function syncPomoConfigFromFile() {
+    try {
+      var raw = typeof pomoWatcher.text === "function" ? pomoWatcher.text() : String(pomoWatcher.text || "")
+      if (raw && raw.trim() !== "") {
+        var data = JSON.parse(raw)
+        if (data && data.config) {
+          if (data.config.work_mins) pomoWorkMins = Number(data.config.work_mins)
+          if (data.config.short_break_mins) pomoShortBreakMins = Number(data.config.short_break_mins)
+          if (data.config.long_break_mins) pomoLongBreakMins = Number(data.config.long_break_mins)
+          if (data.config.long_break_interval) pomoLongBreakInterval = Number(data.config.long_break_interval)
+        }
+      }
+    } catch (e) {}
+  }
+
+  function savePomoConfig(w, s, l, i) {
+    pomoWorkMins = Math.max(1, Math.min(180, w))
+    pomoShortBreakMins = Math.max(1, Math.min(60, s))
+    pomoLongBreakMins = Math.max(1, Math.min(90, l))
+    pomoLongBreakInterval = Math.max(1, Math.min(12, i))
+    var dataFile = root.dataDir + "/pomo.json"
+    var jqCmd = "jq --argjson w " + pomoWorkMins + " --argjson s " + pomoShortBreakMins + " --argjson l " + pomoLongBreakMins + " --argjson i " + pomoLongBreakInterval +
+      " '.config = ((.config // {}) + {\"work_mins\": $w, \"short_break_mins\": $s, \"long_break_mins\": $l, \"long_break_interval\": $i})' " +
+      shellArg(dataFile) + " > " + shellArg(dataFile + ".tmp") + " && mv " + shellArg(dataFile + ".tmp") + " " + shellArg(dataFile)
+    if (bar) bar.run(jqCmd)
+  }
+
+  function displayPomoText() {
+    if (!pomoRunning) return "🍅"
+    var rawText = String(pomo.text || "🍅")
+    if (!privacyMode || !pomo.title) return rawText
+    var fullTitle = String(pomo.title)
+    var masked = maskTitle(fullTitle)
+    var replaced = rawText.replace(fullTitle, masked)
+    if (replaced === rawText && fullTitle.length > 14) {
+      replaced = rawText.replace(fullTitle.substring(0, 14) + "…", masked)
+    }
+    return replaced
   }
 
   function i18n(zh, en) {
@@ -61,6 +157,7 @@ BarWidget {
 
   function close() {
     popupOpen = false
+    showPomoSettings = false
   }
 
   function toggle() {
@@ -75,7 +172,7 @@ BarWidget {
   // Launch Horae in flash capture mode (horae --flash) inside a floating terminal
   function launchFlashCapture() {
     if (!bar) return
-    var fullCmd = ["omarchy-launch-tui", "--app-id=org.omarchy.terminal"].concat(command(["--flash"]))
+    var fullCmd = ["omarchy-launch-tui", "--app-id=org.omarchy.horae-flash"].concat(command(["--flash"]))
     bar.run(fullCmd.map(shellArg).join(" "))
     popupOpen = false
   }
@@ -116,16 +213,19 @@ BarWidget {
   }
 
   function taskTime(task) {
+    if (!task) return 0
     return Number(task.due || task.due_at || task.scheduled_start_at || 0)
   }
 
   function isPending(task) {
+    if (!task) return false
     var status = String(task.status || "").toLowerCase()
     return status !== "done" && status !== "archived"
   }
 
   function taskClass(task) {
-    if (task && task.class) return String(task.class)
+    if (!task) return "alarm-none"
+    if (task.class) return String(task.class)
     var due = taskTime(task)
     if (due <= 0) return "alarm-none"
     var now = Date.now()
@@ -142,10 +242,12 @@ BarWidget {
   }
 
   function isOverdue(task) {
+    if (!task) return false
     return taskClass(task) === "alarm-overdue"
   }
 
   function isUrgent(task) {
+    if (!task) return false
     var c = taskClass(task)
     return c === "alarm-now" || c === "alarm-overdue"
   }
@@ -156,12 +258,36 @@ BarWidget {
     return taskClass(task) === "alarm-now" ? "🔔" : "⏰"
   }
 
+  function isStartTime(task) {
+    if (!task) return false
+    if (task.time_type === "start" || task.is_start === true) return true
+    if (task.time_type === "due" || task.is_start === false) return false
+    if (task.scheduled_start_at && !task.due_at) return true
+    if (String(task.status || "").toLowerCase() === "scheduled") return true
+    return false
+  }
+
+  function timeLabel(task) {
+    return isStartTime(task) ? i18n("计划开始", "Start") : i18n("截止", "Due")
+  }
+
+  function timeFieldLabel(task) {
+    if (!task) return ""
+    var isStart = isStartTime(task)
+    if (isChinese) {
+      return (isStart ? "计划开始" : "截止") + (isStart ? "    " : "        ")
+    }
+    return (isStart ? "Start" : "Due") + (isStart ? "   " : "     ")
+  }
+
   function taskStatus(task) {
     if (!task) return ""
     if (workingTaskId !== "" && String(task.id) === workingTaskId) return i18n("专注中", "Focusing")
     var c = taskClass(task)
-    if (c === "alarm-overdue") return i18n("已逾期", "Overdue")
-    if (c === "alarm-now") return i18n("即将到期", "Due soon")
+    var isStart = isStartTime(task)
+    if (c === "alarm-overdue") return isStart ? i18n("已到时间", "Past start") : i18n("已逾期", "Overdue")
+    if (c === "alarm-now") return isStart ? i18n("即将开始", "Starting soon") : i18n("即将到期", "Due soon")
+    if (String(task.status || "").toLowerCase() === "scheduled") return i18n("已排程", "Scheduled")
     return i18n("待办", "Todo")
   }
 
@@ -246,6 +372,7 @@ BarWidget {
       return
     }
     selectedTaskId = id
+    showPomoSettings = false
     popupOpen = true
   }
 
@@ -276,7 +403,11 @@ BarWidget {
     if (!selectedTask) return
     var due = taskTime(selectedTask)
     var target = due >= Date.now() ? due + 3600000 : Date.now() + 3600000
-    runTaskAction(["schedule", String(selectedTask.id), "--start", formatTimeArg(target)])
+    if (isStartTime(selectedTask)) {
+      runTaskAction(["schedule", String(selectedTask.id), "--start", formatTimeArg(target)])
+    } else {
+      runTaskAction(["modify", String(selectedTask.id), "--due", formatTimeArg(target)])
+    }
   }
 
   function completeSelected() {
@@ -355,7 +486,7 @@ BarWidget {
       Text {
         id: pomoText
         anchors.centerIn: parent
-        text: String(root.pomo.text || "🍅")
+        text: root.displayPomoText()
         color: root.pomoRunning ? (root.pomoWorking ? root.urgent : root.accent) : root.textColor
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -375,13 +506,25 @@ BarWidget {
       MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
-          if (mouse.button === Qt.RightButton) root.openTui()
+          if (mouse.button === Qt.LeftButton) {
+            root.showPomoSettings = true
+            root.open()
+          } else if (mouse.button === Qt.RightButton) {
+            root.openTui()
+          }
         }
         onDoubleClicked: function(mouse) {
           if (mouse.button === Qt.LeftButton) root.stopPomo()
         }
-        onEntered: if (root.bar) root.bar.showTooltip(root, String(root.pomo.tooltip || root.i18n("番茄钟 (右击打开 TUI，双击停止)", "Pomodoro (Right-click opens TUI, double-click stops)")))
+        onEntered: if (root.bar) {
+          var pTooltip = String(root.pomo.tooltip || "")
+          if (root.privacyMode && root.pomo.title) {
+            pTooltip = pTooltip.replace(String(root.pomo.title), root.maskTitle(root.pomo.title))
+          }
+          root.bar.showTooltip(root, pTooltip !== "" ? pTooltip : root.i18n("番茄钟 (左击配置参数，右击打开 TUI，双击停止)", "Pomodoro (Left-click for settings, Right-click for TUI, Double-click to stop)"))
+        }
         onExited: if (root.bar) root.bar.hideTooltip(root)
       }
     }
@@ -397,7 +540,7 @@ BarWidget {
       readonly property bool overdueTask: root.isOverdue(task)
       readonly property bool working: root.workingTaskId !== "" && String(task.id) === root.workingTaskId
       readonly property string timeStr: root.formatDueTime(root.taskTime(task))
-      readonly property string label: root.taskIcon(task) + (timeStr !== "" ? " " + timeStr : "") + " " + String(task.title || "(untitled)")
+      readonly property string label: root.taskIcon(task) + (timeStr !== "" ? " " + timeStr : "") + " " + (root.privacyMode ? root.maskTitle(task.title) : String(task.title || "(untitled)"))
       readonly property real clipWidth: Math.min(taskText.implicitWidth, root.taskSlotWidth)
       implicitWidth: clipWidth + Style.space(8)
       implicitHeight: root.barSize
@@ -450,7 +593,11 @@ BarWidget {
         }
         onEntered: {
           taskItem.hovering = true
-          if (root.bar) root.bar.showTooltip(root, taskItem.label + "\n" + root.i18n("截止: ", "Due: ") + root.formatDue(root.taskTime(taskItem.task)))
+          if (root.bar) {
+            var lbl = root.timeLabel(taskItem.task)
+            var tTitle = root.privacyMode ? root.maskTitle(taskItem.task.title) : String(taskItem.task.title || "(untitled)")
+            root.bar.showTooltip(root, tTitle + "\n" + lbl + ": " + root.formatDue(root.taskTime(taskItem.task)))
+          }
         }
         onExited: {
           taskItem.hovering = false
@@ -474,82 +621,594 @@ BarWidget {
       anchors.fill: parent
       spacing: Style.space(12)
 
-      // --- Selected Task Details Section ---
+      // --- Pomodoro & Plugin Settings Section ---
       Column {
         width: parent.width
         spacing: Style.space(10)
-        visible: root.selectedTask !== null
+        visible: root.showPomoSettings
 
-        Text {
+        // Settings Header Row
+        Row {
           width: parent.width
-          text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + root.selectedTask.title : ""
-          color: root.fg
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.title
-          font.bold: true
-          elide: Text.ElideRight
+          height: Math.max(settingsTitleText.implicitHeight, backBtn.implicitHeight)
+
+          Text {
+            id: settingsTitleText
+            width: parent.width - backBtn.width - Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: "🍅 " + root.i18n("番茄钟与插件设置", "Pomodoro & Settings")
+            color: root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Button {
+            id: backBtn
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("返回 ✕", "Back ✕")
+            foreground: root.fg
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            horizontalPadding: Style.space(8)
+            bordered: true
+            onClicked: root.showPomoSettings = false
+          }
         }
 
+        PanelSeparator { foreground: root.fg }
+
+        // Parameter 1: Work Duration
+        Row {
+          width: parent.width
+          height: Style.space(26)
+
+          Text {
+            width: Style.space(80)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("专注工作", "Work Time")
+            color: root.fg
+            opacity: 0.75
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "-"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins - 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            }
+
+            Text {
+              width: Style.space(56)
+              horizontalAlignment: Text.AlignHCenter
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.pomoWorkMins + " " + root.i18n("分", "m")
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "+"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins + 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            }
+          }
+
+          Item { width: Style.space(8); height: 1 }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Repeater {
+              model: [15, 25, 45, 50]
+              delegate: Button {
+                width: Style.space(34)
+                height: Style.space(22)
+                text: String(modelData)
+                fontSize: Style.font.caption
+                horizontalPadding: 0
+                bordered: true
+                selected: root.pomoWorkMins === modelData
+                accent: root.pomoWorkMins === modelData ? root.accent : root.fg
+                onClicked: root.savePomoConfig(modelData, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+              }
+            }
+          }
+        }
+
+        // Parameter 2: Short Break
+        Row {
+          width: parent.width
+          height: Style.space(26)
+
+          Text {
+            width: Style.space(80)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("短休时间", "Short Break")
+            color: root.fg
+            opacity: 0.75
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "-"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins - 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            }
+
+            Text {
+              width: Style.space(56)
+              horizontalAlignment: Text.AlignHCenter
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.pomoShortBreakMins + " " + root.i18n("分", "m")
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "+"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins + 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            }
+          }
+
+          Item { width: Style.space(8); height: 1 }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Repeater {
+              model: [3, 5, 10, 15]
+              delegate: Button {
+                width: Style.space(34)
+                height: Style.space(22)
+                text: String(modelData)
+                fontSize: Style.font.caption
+                horizontalPadding: 0
+                bordered: true
+                selected: root.pomoShortBreakMins === modelData
+                accent: root.pomoShortBreakMins === modelData ? root.accent : root.fg
+                onClicked: root.savePomoConfig(root.pomoWorkMins, modelData, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+              }
+            }
+          }
+        }
+
+        // Parameter 3: Long Break
+        Row {
+          width: parent.width
+          height: Style.space(26)
+
+          Text {
+            width: Style.space(80)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("长休时间", "Long Break")
+            color: root.fg
+            opacity: 0.75
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "-"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins - 5, root.pomoLongBreakInterval)
+            }
+
+            Text {
+              width: Style.space(56)
+              horizontalAlignment: Text.AlignHCenter
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.pomoLongBreakMins + " " + root.i18n("分", "m")
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "+"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins + 5, root.pomoLongBreakInterval)
+            }
+          }
+
+          Item { width: Style.space(8); height: 1 }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Repeater {
+              model: [10, 15, 20, 30]
+              delegate: Button {
+                width: Style.space(34)
+                height: Style.space(22)
+                text: String(modelData)
+                fontSize: Style.font.caption
+                horizontalPadding: 0
+                bordered: true
+                selected: root.pomoLongBreakMins === modelData
+                accent: root.pomoLongBreakMins === modelData ? root.accent : root.fg
+                onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, modelData, root.pomoLongBreakInterval)
+              }
+            }
+          }
+        }
+
+        // Parameter 4: Long Break Interval
+        Row {
+          width: parent.width
+          height: Style.space(26)
+
+          Text {
+            width: Style.space(80)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("长休轮数", "Interval")
+            color: root.fg
+            opacity: 0.75
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "-"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval - 1)
+            }
+
+            Text {
+              width: Style.space(56)
+              horizontalAlignment: Text.AlignHCenter
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.pomoLongBreakInterval + " " + root.i18n("轮", "cyc")
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+
+            Button {
+              width: Style.space(24)
+              height: Style.space(24)
+              text: "+"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval + 1)
+            }
+          }
+
+          Item { width: Style.space(8); height: 1 }
+
+          Row {
+            spacing: Style.space(4)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Repeater {
+              model: [2, 3, 4, 5]
+              delegate: Button {
+                width: Style.space(34)
+                height: Style.space(22)
+                text: String(modelData)
+                fontSize: Style.font.caption
+                horizontalPadding: 0
+                bordered: true
+                selected: root.pomoLongBreakInterval === modelData
+                accent: root.pomoLongBreakInterval === modelData ? root.accent : root.fg
+                onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, modelData)
+              }
+            }
+          }
+        }
+
+        PanelSeparator { foreground: root.fg }
+
+        // Privacy Mode Switch
+        Row {
+          width: parent.width
+          Text {
+            width: parent.width - privacyModeToggle.width - Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("状态栏隐私模式 (仅暴露首字/词)", "Status Bar Privacy (First char/word only)")
+            color: root.fg
+            opacity: 0.8
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+          ToggleSwitch {
+            id: privacyModeToggle
+            checked: root.privacyMode
+            trackHeight: 18
+            accent: root.accent
+            foreground: root.fg
+            cursorRing: false
+            anchors.verticalCenter: parent.verticalCenter
+            onToggled: root.togglePrivacyMode()
+          }
+        }
+
+        // Language Switch
+        Row {
+          width: parent.width
+          Text {
+            width: parent.width - langSettingsToggle.width - Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("界面语言 (中文 / English)", "Interface Language (ZH / EN)")
+            color: root.fg
+            opacity: 0.8
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+          ToggleSwitch {
+            id: langSettingsToggle
+            checked: root.isChinese
+            trackHeight: 18
+            accent: root.accent
+            foreground: root.fg
+            cursorRing: false
+            anchors.verticalCenter: parent.verticalCenter
+            onToggled: root.toggleLanguage()
+          }
+        }
+
+        Button {
+          width: parent.width
+          text: root.i18n("返回任务列表", "Back to Tasks")
+          foreground: root.fg
+          fontFamily: root.fontFamily
+          fontSize: Style.font.bodySmall
+          bordered: true
+          onClicked: root.showPomoSettings = false
+        }
+      }
+
+      // --- Selected Task Details Section ---
+      Column {
+        width: parent.width
+        spacing: Style.space(12)
+        visible: !root.showPomoSettings && root.selectedTask !== null
+
+        // Header Row: Task Title on left, Privacy + Settings + Language on top-right
+        Row {
+          width: parent.width
+          height: Math.max(taskTitleText.implicitHeight, headerControlsRow.implicitHeight)
+
+          Text {
+            id: taskTitleText
+            width: parent.width - headerControlsRow.width - Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + (root.privacyMode ? root.maskTitle(root.selectedTask.title) : root.selectedTask.title) : ""
+            color: root.fg
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.title
+            font.bold: true
+            elide: Text.ElideRight
+          }
+
+          Row {
+            id: headerControlsRow
+            spacing: Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+
+            // Quick Privacy Toggle
+            Button {
+              width: Style.space(26)
+              height: Style.space(22)
+              text: root.privacyMode ? "🔒" : "👁"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              accent: root.privacyMode ? root.accent : root.fg
+              opacity: root.privacyMode ? 1.0 : 0.6
+              onClicked: root.togglePrivacyMode()
+            }
+
+            // Pomodoro Settings Toggle
+            Button {
+              width: Style.space(26)
+              height: Style.space(22)
+              text: "⚙"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              opacity: 0.75
+              onClicked: root.showPomoSettings = true
+            }
+
+            // Language Toggle Switch
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                text: root.isChinese ? "中" : "EN"
+                color: root.fg
+                opacity: 0.75
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              ToggleSwitch {
+                checked: root.isChinese
+                trackHeight: 18
+                accent: root.accent
+                foreground: root.fg
+                cursorRing: false
+                anchors.verticalCenter: parent.verticalCenter
+                onToggled: root.toggleLanguage()
+              }
+            }
+          }
+        }
+
+        // Key-Value Grid: fixed label width for rock-solid visual baseline in both ZH and EN
         Column {
           width: parent.width
-          spacing: Style.spacing.labelGap
-          Text {
-            text: root.selectedTask ? root.i18n("状态    ", "Status  ") + root.taskStatus(root.selectedTask) : ""
-            color: root.fg
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-          Text {
-            text: root.selectedTask ? root.i18n("截止    ", "Due     ") + root.formatDue(root.taskTime(root.selectedTask)) : ""
-            color: root.fg
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-          Text {
-            text: root.selectedTask ? root.i18n("标签    ", "Tags    ") + String(root.selectedTask.tags || "-") : ""
-            color: root.fg
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            elide: Text.ElideRight
+          spacing: Style.space(6)
+
+          Row {
             width: parent.width
+            spacing: Style.space(12)
+            Text {
+              width: Style.space(72)
+              text: root.i18n("状态", "Status")
+              color: root.fg
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+            Text {
+              text: root.selectedTask ? root.taskStatus(root.selectedTask) : ""
+              color: root.isUrgent(root.selectedTask) ? root.urgent : root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: root.isUrgent(root.selectedTask)
+            }
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(12)
+            Text {
+              width: Style.space(72)
+              text: root.selectedTask ? root.timeLabel(root.selectedTask) : root.i18n("时间", "Time")
+              color: root.fg
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+            Text {
+              text: root.selectedTask ? root.formatDue(root.taskTime(root.selectedTask)) : "-"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          Row {
+            width: parent.width
+            spacing: Style.space(12)
+            Text {
+              width: Style.space(72)
+              text: root.i18n("标签", "Tags")
+              color: root.fg
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+            Text {
+              width: parent.width - Style.space(84)
+              text: root.selectedTask ? String(root.selectedTask.tags || "-") : "-"
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              elide: Text.ElideRight
+            }
           }
         }
 
+        // Action Buttons: equal width distribution across the panel width
         Row {
           width: parent.width
           spacing: Style.space(8)
+          readonly property real btnW: Math.floor((width - 3 * spacing) / 4)
+
           Button {
+            width: parent.btnW
             text: root.i18n("开启番茄钟", "Pomodoro")
             foreground: root.fg
             accent: root.urgent
             fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
+            fontSize: Style.font.caption
+            horizontalPadding: Style.space(4)
             bordered: true
             onClicked: root.startSelected()
           }
           Button {
+            width: parent.btnW
             text: root.i18n("延迟 1h", "+1h Delay")
             foreground: root.fg
             fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
+            fontSize: Style.font.caption
+            horizontalPadding: Style.space(4)
             bordered: true
             onClicked: root.deferSelected()
           }
           Button {
+            width: parent.btnW
             text: root.i18n("完成", "Done")
             foreground: root.fg
             accent: root.accent
             fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
+            fontSize: Style.font.caption
+            horizontalPadding: Style.space(4)
             bordered: true
             onClicked: root.completeSelected()
           }
           Button {
+            width: parent.btnW
             text: root.i18n("归档", "Archive")
             foreground: root.fg
             accent: root.urgent
             fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
+            fontSize: Style.font.caption
+            horizontalPadding: Style.space(4)
             bordered: true
             onClicked: root.archiveSelected()
           }
@@ -559,16 +1218,82 @@ BarWidget {
       // If no task is selected, show Upcoming Tasks list
       Column {
         width: parent.width
-        spacing: Style.space(6)
-        visible: root.selectedTask === null && root.displayTasks.length > 0
+        spacing: Style.space(8)
+        visible: !root.showPomoSettings && root.selectedTask === null && root.displayTasks.length > 0
 
-        Text {
-          text: root.i18n("即将到期 / 逾期任务:", "Upcoming / Overdue Tasks:")
-          color: root.textColor
-          opacity: 0.7
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
+        // Header with list title and top-right tools
+        Row {
+          width: parent.width
+          height: Math.max(listTitleText.implicitHeight, emptyHeaderControlsRow.implicitHeight)
+
+          Text {
+            id: listTitleText
+            width: parent.width - emptyHeaderControlsRow.width - Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("近期排程 / 待办任务:", "Upcoming Tasks:")
+            color: root.textColor
+            opacity: 0.7
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+
+          Row {
+            id: emptyHeaderControlsRow
+            spacing: Style.space(6)
+            anchors.verticalCenter: parent.verticalCenter
+
+            // Quick Privacy Toggle
+            Button {
+              width: Style.space(26)
+              height: Style.space(22)
+              text: root.privacyMode ? "🔒" : "👁"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              accent: root.privacyMode ? root.accent : root.fg
+              opacity: root.privacyMode ? 1.0 : 0.6
+              onClicked: root.togglePrivacyMode()
+            }
+
+            // Pomodoro Settings Toggle
+            Button {
+              width: Style.space(26)
+              height: Style.space(22)
+              text: "⚙"
+              fontSize: Style.font.caption
+              horizontalPadding: 0
+              bordered: true
+              opacity: 0.75
+              onClicked: root.showPomoSettings = true
+            }
+
+            // Language Toggle Switch
+            Row {
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                text: root.isChinese ? "中" : "EN"
+                color: root.fg
+                opacity: 0.75
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              ToggleSwitch {
+                checked: root.isChinese
+                trackHeight: 18
+                accent: root.accent
+                foreground: root.fg
+                cursorRing: false
+                anchors.verticalCenter: parent.verticalCenter
+                onToggled: root.toggleLanguage()
+              }
+            }
+          }
         }
 
         Repeater {
@@ -588,7 +1313,7 @@ BarWidget {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: String(taskData.title || "")
+                text: String(root.privacyMode ? root.maskTitle(taskData.title) : (taskData.title || ""))
                 color: root.isUrgent(taskData) ? root.urgent : root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -616,28 +1341,48 @@ BarWidget {
         }
       }
 
-      PanelSeparator { foreground: root.fg }
+      PanelSeparator {
+        foreground: root.fg
+        visible: !root.showPomoSettings
+      }
 
-      // --- Bottom Quick Actions Row ---
+      // --- Bottom Quick Actions Row (3 buttons) ---
       Row {
         width: parent.width
         spacing: Style.space(8)
+        visible: !root.showPomoSettings
+        readonly property real bBtnW: Math.floor((width - 2 * spacing) / 3)
 
         Button {
+          width: parent.bBtnW
           text: root.i18n("+ 闪念录入", "+ Flash capture")
           foreground: root.fg
           accent: root.accent
           fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
+          fontSize: Style.font.caption
+          horizontalPadding: Style.space(4)
           bordered: true
           onClicked: root.launchFlashCapture()
         }
 
         Button {
+          width: parent.bBtnW
+          text: root.i18n("⚙ 番茄设置", "⚙ Settings")
+          foreground: root.fg
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          horizontalPadding: Style.space(4)
+          bordered: true
+          onClicked: root.showPomoSettings = true
+        }
+
+        Button {
+          width: parent.bBtnW
           text: root.i18n("打开 TUI", "Open TUI")
           foreground: root.fg
           fontFamily: root.fontFamily
-          fontSize: Style.font.bodySmall
+          fontSize: Style.font.caption
+          horizontalPadding: Style.space(4)
           bordered: true
           onClicked: root.openTui()
         }
@@ -656,6 +1401,7 @@ BarWidget {
   }
 
   Component.onCompleted: {
+    root.syncPomoConfigFromFile()
     root.refreshTasks()
     root.refreshPomo()
   }
@@ -684,9 +1430,9 @@ BarWidget {
     path: root.dataDir + "/pomo.json"
     watchChanges: true
     printErrors: false
-    onLoaded: root.refreshPomo()
+    onLoaded: { root.syncPomoConfigFromFile(); root.refreshPomo() }
     onLoadFailed: root.refreshPomo()
-    onFileChanged: root.refreshPomo()
+    onFileChanged: { root.syncPomoConfigFromFile(); root.refreshPomo() }
   }
 
   FileView {
