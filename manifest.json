@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "alex zhao",
   "license": "MIT",
-  "description": "Upcoming and overdue GTD tasks with Pomodoro controls for the Omarchy bar.",
+  "description": "Glance at upcoming GTD tasks, capture thoughts instantly, and stay in flow with smart Pomodoro focus timers right on your bar. Elegant, lightweight, and blazingly fast with a Rust backend.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,14 +14,16 @@
   },
   "barWidget": {
     "displayName": "Horae Tasks & Pomodoro",
-    "description": "Upcoming and overdue GTD tasks with Pomodoro controls",
+    "description": "Elegant, lightweight GTD task stream and Pomodoro focus timers powered by Rust",
     "category": "Productivity",
     "aliases": [
       "horae",
       "tasks",
       "pomodoro",
       "gtd",
-      "todo"
+      "todo",
+      "focus",
+      "rust"
     ],
     "allowMultiple": false,
     "defaultSection": "center"

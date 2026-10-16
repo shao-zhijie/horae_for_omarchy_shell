@@ -4,17 +4,15 @@
 
 ![Horae Tasks & Pomodoro](preview.png)
 
-[Omarchy](https://omarchy.org/) Quattro 状态栏（bar）组件：将 [Horae](https://github.com/zhaohang1205/horae) 的即将到期 / 逾期 GTD 任务与番茄钟专注状态直接呈现在 bar 上，点击即可快捷操作，无需离开当前工作流或单独打开终端。
+优雅简洁、快速轻巧的 [Omarchy](https://omarchy.org/) Quattro 状态栏组件，由高性能 [Horae](https://github.com/zhaohang1205/horae) Rust 核心引擎强力驱动。在状态栏一眼掌握即将到期的 GTD 任务流，秒级弹窗录入闪念灵感，一键开启番茄专注流——零上下文切换，保持心流，告别臃肿。
 
 ## 功能特性
 
-- **🔒 状态栏隐私模式**：状态栏支持一键切换隐私模式（鼠标悬停组件时在最左侧呼出 `󰈈` / `󰈉` 图标，平时自动隐身不占空间；也可在面板顶部或设置中切换）。开启后，状态栏上的任务标题与正在专注的番茄钟任务**仅暴露首字**（中文如“铲…”）或**首个单词**（英文如“meeting…”），在公共办公、会议投屏或直播分享屏幕时有效防止敏感日程泄露。
+- **🔒 状态栏隐私模式**：状态栏支持一键切换隐私模式（鼠标悬停组件时在最左侧呼出 `󰈈` / `󰈉` 图标，平时自动隐身不占空间；隐私模式仅作用于状态栏，弹出的操作小窗口中始终保持明文呈现）。开启后，状态栏上的任务标题与正在专注的番茄钟任务**仅暴露首字**（中文如“铲…”）或**首个单词**（英文如“meeting…”），在公共办公、会议投屏或直播分享屏幕时有效防止敏感日程泄露。
 - **闪念快速录入**：左击状态栏番茄钟图标 `🍅`（平时随分隔符隐身，鼠标悬停时在最右侧呼出，运行中/无任务时常驻），立即在浮动终端中唤出 Horae 原生闪念录入窗口（`horae --flash`）。享受终端内完整的语法高亮、动态卡槽提示（`[*周期] [~时间] [!优先级] [@标签]`）与标签补全，敲击回车即可自动保存至收件箱并秒级退出！
-- **🍅 番茄钟参数配置**：无需进入终端命令行，点击面板顶部的 `⚙` 或底部设置按钮即可展开配置面板：
-  - 专注工作时长（默认 25 分钟，支持快捷选择 15m / 25m / 45m / 50m 或微调步进）
-  - 短休时长（默认 5 分钟，支持 3m / 5m / 10m / 15m）
-  - 长休时长（默认 15 分钟，支持 10m / 15m / 20m / 30m）
-  - 长休间隔周期（默认 4 轮，支持 2 / 3 / 4 / 5 轮）
+- **🍅 番茄钟参数配置**：无需进入终端命令行，点击面板顶部的 `⚙` 即可展开配置面板：
+  - 参数式微调与填入：支持直接输入数字、点击左右 `[-]` / `[+]` 按钮步进或滚动鼠标滚轮，快速调整专注时长（1-180 分钟）、短休时长（1-60 分钟）、长休时长（1-90 分钟）及长休轮数（1-12 轮）。
+  - 一键恢复默认：提供“恢复默认 (25/5/15/4)”按钮，可随时一键重置为标准经典番茄钟设置。
   - 修改即时同步并保存至 `~/.config/horae/pomo.json`，与 Horae 核心引擎无缝互通。
 - **即时任务流**：直接呈现由 Horae 引擎计算的即将到期与计划任务窗口。
 - **番茄钟专注指示**：正在番茄钟专注的任务会自动用 🍅 固定到最前，并带动态呼吸闪烁与秒级倒计时。
@@ -24,7 +22,6 @@
   - ✅ **完成**：标记任务已完成（正在专注时自动停用番茄钟）。
   - 📦 **归档**：将任务软删除归档。
   - ⚡ **+ 闪念录入**：面板内快捷拉起 `horae --flash`。
-  - ⚙️ **番茄设置**：直接切换到番茄钟与插件设置面板。
   - 🖥️ **打开 TUI**：一键进入 Horae TUI 终端全功能面板。
 - **悬停跑马灯**：标题超出宽度时，悬停鼠标自动平滑横向滚动，平时保持沉浸简洁。
 - **番茄钟与 TUI 深度联动**：左击番茄钟图标打开快速录入（`horae --flash`），右击直接唤出或聚焦 Horae TUI 终端窗口（`omarchy-launch-or-focus-tui horae`）；双击停止番茄钟。
@@ -39,11 +36,29 @@
   cargo install --git https://github.com/zhaohang1205/horae.git --rev ef187817ec29411907aed5366a26b1167aaf417e
   ```
 
-## 安装
+## 安装与配置
+
+### 方法 1：一键自动化安装（推荐）
+
+直接克隆或在本地仓库运行自带的安装脚本，将自动完成插件链接、居中启用以及推荐参数（`maxWidth: 420`, `autoDismiss: 15`）注入：
+
+```bash
+git clone https://github.com/zhaohang1205/horae_for_omarchy_shell.git
+cd horae_for_omarchy_shell
+./install.sh
+```
+
+### 方法 2：使用 Omarchy CLI 安装
 
 ```bash
 omarchy plugin add https://github.com/zhaohang1205/horae_for_omarchy_shell.git --enable
 ```
+
+> **提示**：插件代码内已默认开启 15 秒自动消失（`autoDismiss: 15`），安装即生效。若需要将参数显式写入 `~/.config/omarchy/shell.json`，可执行：
+> ```bash
+> omarchy-shell shell setBarWidget "io.github.zhaohang1205.horae-tasks" "autoDismiss" "15" "{}"
+> omarchy-shell shell setBarWidget "io.github.zhaohang1205.horae-tasks" "maxWidth" "420" "{}"
+> ```
 
 ## 状态栏位置调整
 
@@ -58,8 +73,25 @@ omarchy bar move io.github.zhaohang1205.horae-tasks --section center
 ```json
 {
   "id": "io.github.zhaohang1205.horae-tasks",
-  "maxWidth": 420
+  "maxWidth": 420,
+  "autoDismiss": 15
 }
+```
+
+## 安全卸载
+
+无论通过哪种方式安装，都可以通过以下方式之一完成**干净、安全**的卸载（自动从状态栏下线、清理插件目录并重新加载 Shell，绝不破坏您的个人 Horae 任务数据）：
+
+### 方法 1：使用官方 Omarchy CLI（推荐）
+
+```bash
+omarchy plugin remove io.github.zhaohang1205.horae-tasks
+```
+
+### 方法 2：使用项目自带卸载脚本
+
+```bash
+./uninstall.sh
 ```
 
 ## 设置选项
@@ -77,6 +109,7 @@ omarchy bar move io.github.zhaohang1205.horae-tasks --section center
 | `alwaysShow` | boolean | `true` | 无待办任务时是否常驻显示番茄钟驻留入口 |
 | `textColor` | string | `""` | 自定义文本颜色（默认继承状态栏前景色） |
 | `privacyMode` | boolean | `false` | 隐私模式（开启后仅暴露任务首字/单词） |
+| `autoDismiss` | number | `15` | 小窗口无操作/移开鼠标后自动消失时间（秒，设为 `0` 禁用自动消失） |
 | `lang` | string | `""` | 语言设置（`"zh"` 或 `"en"`，留空自动检测系统语言） |
 
 ## 推荐窗口规则（Hyprland 弹窗配置）

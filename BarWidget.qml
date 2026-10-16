@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
 
@@ -34,6 +35,7 @@ BarWidget {
   }
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property bool alwaysShow: Boolean(setting("alwaysShow", true))
+  readonly property int autoDismissSecs: Math.max(0, Number(setting("autoDismiss", 15)))
 
   // Language management with toggle support and persistence
   property string currentLang: {
@@ -100,7 +102,15 @@ BarWidget {
   property int pomoLongBreakMins: 15
   property int pomoLongBreakInterval: 4
 
+  property bool _savingPomoConfig: false
+  Timer {
+    id: savingPomoTimer
+    interval: 1000
+    onTriggered: root._savingPomoConfig = false
+  }
+
   function syncPomoConfigFromFile() {
+    if (_savingPomoConfig) return
     try {
       var raw = typeof pomoWatcher.text === "function" ? pomoWatcher.text() : String(pomoWatcher.text || "")
       if (raw && raw.trim() !== "") {
@@ -116,16 +126,51 @@ BarWidget {
   }
 
   function savePomoConfig(w, s, l, i) {
+    _savingPomoConfig = true
+    savingPomoTimer.restart()
     pomoWorkMins = Math.max(1, Math.min(180, w))
     pomoShortBreakMins = Math.max(1, Math.min(60, s))
     pomoLongBreakMins = Math.max(1, Math.min(90, l))
     pomoLongBreakInterval = Math.max(1, Math.min(12, i))
+    syncInputsFromPomoConfig()
     var dataFile = root.dataDir + "/pomo.json"
-    var jqCmd = "jq --argjson w " + pomoWorkMins + " --argjson s " + pomoShortBreakMins + " --argjson l " + pomoLongBreakMins + " --argjson i " + pomoLongBreakInterval +
+    var jqCmd = "[ -f " + shellArg(dataFile) + " ] || echo '{}' > " + shellArg(dataFile) + " ; " +
+      "jq --argjson w " + pomoWorkMins + " --argjson s " + pomoShortBreakMins + " --argjson l " + pomoLongBreakMins + " --argjson i " + pomoLongBreakInterval +
       " '.config = ((.config // {}) + {\"work_mins\": $w, \"short_break_mins\": $s, \"long_break_mins\": $l, \"long_break_interval\": $i})' " +
-      shellArg(dataFile) + " > " + shellArg(dataFile + ".tmp") + " && mv " + shellArg(dataFile + ".tmp") + " " + shellArg(dataFile)
-    if (bar) bar.run(jqCmd)
+      shellArg(dataFile) + " > " + shellArg(dataFile + ".tmp") + " && cat " + shellArg(dataFile + ".tmp") + " > " + shellArg(dataFile) + " && rm -f " + shellArg(dataFile + ".tmp")
+    if (bar && typeof bar.run === "function") {
+      bar.run(jqCmd)
+    } else {
+      Quickshell.execDetached(["bash", "-c", jqCmd])
+    }
   }
+
+  function resetPomoConfigToDefault() {
+    savePomoConfig(25, 5, 15, 4)
+    syncInputsFromPomoConfig()
+  }
+
+  function applyPomoInputs() {
+    var w = parseInt(workInput.text)
+    var s = parseInt(shortBreakInput.text)
+    var l = parseInt(longBreakInput.text)
+    var i = parseInt(intervalInput.text)
+    savePomoConfig(isNaN(w) ? pomoWorkMins : w, isNaN(s) ? pomoShortBreakMins : s, isNaN(l) ? pomoLongBreakMins : l, isNaN(i) ? pomoLongBreakInterval : i)
+    syncInputsFromPomoConfig()
+  }
+
+  function syncInputsFromPomoConfig() {
+    if (typeof workInput !== "undefined" && workInput) workInput.text = String(pomoWorkMins)
+    if (typeof shortBreakInput !== "undefined" && shortBreakInput) shortBreakInput.text = String(pomoShortBreakMins)
+    if (typeof longBreakInput !== "undefined" && longBreakInput) longBreakInput.text = String(pomoLongBreakMins)
+    if (typeof intervalInput !== "undefined" && intervalInput) intervalInput.text = String(pomoLongBreakInterval)
+  }
+
+  onPomoWorkMinsChanged: syncInputsFromPomoConfig()
+  onPomoShortBreakMinsChanged: syncInputsFromPomoConfig()
+  onPomoLongBreakMinsChanged: syncInputsFromPomoConfig()
+  onPomoLongBreakIntervalChanged: syncInputsFromPomoConfig()
+  onShowPomoSettingsChanged: if (showPomoSettings) syncInputsFromPomoConfig()
 
   function displayPomoText() {
     if (!pomoRunning) return "🍅"
@@ -674,47 +719,35 @@ BarWidget {
     bar: root.bar
     owner: root
     open: root.popupOpen
-    contentWidth: popup.fittedContentWidth(Style.space(420))
+    contentWidth: popup.fittedContentWidth(Style.space(380))
     contentHeight: popup.fittedContentHeight(popupContent.implicitHeight)
 
     Column {
       id: popupContent
       anchors.fill: parent
-      spacing: Style.space(12)
+      spacing: Style.space(8)
 
       // --- Pomodoro & Plugin Settings Section ---
       Column {
         width: parent.width
-        spacing: Style.space(10)
+        spacing: Style.space(8)
         visible: root.showPomoSettings
 
         // Settings Header Row
         Row {
           width: parent.width
-          height: Math.max(settingsTitleText.implicitHeight, backBtn.implicitHeight)
+          height: settingsTitleText.implicitHeight
 
           Text {
             id: settingsTitleText
-            width: parent.width - backBtn.width - Style.space(10)
+            width: parent.width
             anchors.verticalCenter: parent.verticalCenter
-            text: "🍅 " + root.i18n("番茄钟与插件设置", "Pomodoro & Settings")
+            text: "🍅 " + root.i18n("番茄钟设置", "Pomodoro Settings")
             color: root.fg
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
             font.bold: true
             elide: Text.ElideRight
-          }
-
-          Button {
-            id: backBtn
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.i18n("返回 ✕", "Back ✕")
-            foreground: root.fg
-            fontFamily: root.fontFamily
-            fontSize: Style.font.caption
-            horizontalPadding: Style.space(8)
-            bordered: true
-            onClicked: root.showPomoSettings = false
           }
         }
 
@@ -723,346 +756,328 @@ BarWidget {
         // Parameter 1: Work Duration
         Row {
           width: parent.width
-          height: Style.space(26)
+          height: Style.space(28)
+          spacing: Style.space(4)
 
           Text {
-            width: Style.space(80)
+            width: Style.space(90)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.i18n("专注工作", "Work Time")
+            text: root.i18n("专注时长", "Work Time")
             color: root.fg
-            opacity: 0.75
+            opacity: 0.8
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
 
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "-"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins - 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+          }
 
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "-"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins - 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
-            }
+          TextField {
+            id: workInput
+            width: Style.space(56)
+            height: Style.space(24)
+            verticalPadding: Style.space(1)
+            horizontalPadding: Style.space(2)
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(root.pomoWorkMins)
+            horizontalAlignment: TextInput.AlignHCenter
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            validator: IntValidator { bottom: 1; top: 180 }
+            inputMethodHints: Qt.ImhDigitsOnly
+            Keys.onReturnPressed: root.applyPomoInputs()
+            Keys.onEnterPressed: root.applyPomoInputs()
 
-            Text {
-              width: Style.space(56)
-              horizontalAlignment: Text.AlignHCenter
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.pomoWorkMins + " " + root.i18n("分", "m")
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "+"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins + 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            WheelHandler {
+              onWheel: function(event) {
+                if (event.angleDelta.y > 0) {
+                  root.savePomoConfig(root.pomoWorkMins + 1, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+                } else if (event.angleDelta.y < 0) {
+                  root.savePomoConfig(root.pomoWorkMins - 1, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+                }
+              }
             }
           }
 
-          Item { width: Style.space(8); height: 1 }
-
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "+"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins + 5, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+          }
 
-            Repeater {
-              model: [15, 25, 45, 50]
-              delegate: Button {
-                width: Style.space(34)
-                height: Style.space(22)
-                text: String(modelData)
-                fontSize: Style.font.caption
-                horizontalPadding: 0
-                bordered: true
-                selected: root.pomoWorkMins === modelData
-                accent: root.pomoWorkMins === modelData ? root.accent : root.fg
-                onClicked: root.savePomoConfig(modelData, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval)
-              }
-            }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("分钟 (1-180)", "mins (1-180)")
+            color: root.fg
+            opacity: 0.55
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
         // Parameter 2: Short Break
         Row {
           width: parent.width
-          height: Style.space(26)
+          height: Style.space(28)
+          spacing: Style.space(4)
 
           Text {
-            width: Style.space(80)
+            width: Style.space(90)
             anchors.verticalCenter: parent.verticalCenter
             text: root.i18n("短休时间", "Short Break")
             color: root.fg
-            opacity: 0.75
+            opacity: 0.8
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
 
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "-"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins - 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+          }
 
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "-"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins - 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
-            }
+          TextField {
+            id: shortBreakInput
+            width: Style.space(56)
+            height: Style.space(24)
+            verticalPadding: Style.space(1)
+            horizontalPadding: Style.space(2)
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(root.pomoShortBreakMins)
+            horizontalAlignment: TextInput.AlignHCenter
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            validator: IntValidator { bottom: 1; top: 60 }
+            inputMethodHints: Qt.ImhDigitsOnly
+            Keys.onReturnPressed: root.applyPomoInputs()
+            Keys.onEnterPressed: root.applyPomoInputs()
 
-            Text {
-              width: Style.space(56)
-              horizontalAlignment: Text.AlignHCenter
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.pomoShortBreakMins + " " + root.i18n("分", "m")
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "+"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins + 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+            WheelHandler {
+              onWheel: function(event) {
+                if (event.angleDelta.y > 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins + 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+                } else if (event.angleDelta.y < 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins - 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+                }
+              }
             }
           }
 
-          Item { width: Style.space(8); height: 1 }
-
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "+"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins + 1, root.pomoLongBreakMins, root.pomoLongBreakInterval)
+          }
 
-            Repeater {
-              model: [3, 5, 10, 15]
-              delegate: Button {
-                width: Style.space(34)
-                height: Style.space(22)
-                text: String(modelData)
-                fontSize: Style.font.caption
-                horizontalPadding: 0
-                bordered: true
-                selected: root.pomoShortBreakMins === modelData
-                accent: root.pomoShortBreakMins === modelData ? root.accent : root.fg
-                onClicked: root.savePomoConfig(root.pomoWorkMins, modelData, root.pomoLongBreakMins, root.pomoLongBreakInterval)
-              }
-            }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("分钟 (1-60)", "mins (1-60)")
+            color: root.fg
+            opacity: 0.55
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
         // Parameter 3: Long Break
         Row {
           width: parent.width
-          height: Style.space(26)
+          height: Style.space(28)
+          spacing: Style.space(4)
 
           Text {
-            width: Style.space(80)
+            width: Style.space(90)
             anchors.verticalCenter: parent.verticalCenter
             text: root.i18n("长休时间", "Long Break")
             color: root.fg
-            opacity: 0.75
+            opacity: 0.8
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
 
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "-"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins - 5, root.pomoLongBreakInterval)
+          }
 
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "-"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins - 5, root.pomoLongBreakInterval)
-            }
+          TextField {
+            id: longBreakInput
+            width: Style.space(56)
+            height: Style.space(24)
+            verticalPadding: Style.space(1)
+            horizontalPadding: Style.space(2)
+            anchors.verticalCenter: parent.verticalCenter
+            text: String(root.pomoLongBreakMins)
+            horizontalAlignment: TextInput.AlignHCenter
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            validator: IntValidator { bottom: 1; top: 90 }
+            inputMethodHints: Qt.ImhDigitsOnly
+            Keys.onReturnPressed: root.applyPomoInputs()
+            Keys.onEnterPressed: root.applyPomoInputs()
 
-            Text {
-              width: Style.space(56)
-              horizontalAlignment: Text.AlignHCenter
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.pomoLongBreakMins + " " + root.i18n("分", "m")
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "+"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins + 5, root.pomoLongBreakInterval)
+            WheelHandler {
+              onWheel: function(event) {
+                if (event.angleDelta.y > 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins + 1, root.pomoLongBreakInterval)
+                } else if (event.angleDelta.y < 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins - 1, root.pomoLongBreakInterval)
+                }
+              }
             }
           }
 
-          Item { width: Style.space(8); height: 1 }
-
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
+            text: "+"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins + 5, root.pomoLongBreakInterval)
+          }
 
-            Repeater {
-              model: [10, 15, 20, 30]
-              delegate: Button {
-                width: Style.space(34)
-                height: Style.space(22)
-                text: String(modelData)
-                fontSize: Style.font.caption
-                horizontalPadding: 0
-                bordered: true
-                selected: root.pomoLongBreakMins === modelData
-                accent: root.pomoLongBreakMins === modelData ? root.accent : root.fg
-                onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, modelData, root.pomoLongBreakInterval)
-              }
-            }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.i18n("分钟 (1-90)", "mins (1-90)")
+            color: root.fg
+            opacity: 0.55
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
         // Parameter 4: Long Break Interval
         Row {
           width: parent.width
-          height: Style.space(26)
+          height: Style.space(28)
+          spacing: Style.space(4)
 
           Text {
-            width: Style.space(80)
+            width: Style.space(90)
             anchors.verticalCenter: parent.verticalCenter
             text: root.i18n("长休轮数", "Interval")
             color: root.fg
-            opacity: 0.75
+            opacity: 0.8
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
           }
 
-          Row {
-            spacing: Style.space(4)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
-
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "-"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval - 1)
-            }
-
-            Text {
-              width: Style.space(56)
-              horizontalAlignment: Text.AlignHCenter
-              anchors.verticalCenter: parent.verticalCenter
-              text: root.pomoLongBreakInterval + " " + root.i18n("轮", "cyc")
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-
-            Button {
-              width: Style.space(24)
-              height: Style.space(24)
-              text: "+"
-              fontSize: Style.font.caption
-              horizontalPadding: 0
-              bordered: true
-              onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval + 1)
-            }
+            text: "-"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval - 1)
           }
 
-          Item { width: Style.space(8); height: 1 }
-
-          Row {
-            spacing: Style.space(4)
+          TextField {
+            id: intervalInput
+            width: Style.space(56)
+            height: Style.space(24)
+            verticalPadding: Style.space(1)
+            horizontalPadding: Style.space(2)
             anchors.verticalCenter: parent.verticalCenter
+            text: String(root.pomoLongBreakInterval)
+            horizontalAlignment: TextInput.AlignHCenter
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            validator: IntValidator { bottom: 1; top: 12 }
+            inputMethodHints: Qt.ImhDigitsOnly
+            Keys.onReturnPressed: root.applyPomoInputs()
+            Keys.onEnterPressed: root.applyPomoInputs()
 
-            Repeater {
-              model: [2, 3, 4, 5]
-              delegate: Button {
-                width: Style.space(34)
-                height: Style.space(22)
-                text: String(modelData)
-                fontSize: Style.font.caption
-                horizontalPadding: 0
-                bordered: true
-                selected: root.pomoLongBreakInterval === modelData
-                accent: root.pomoLongBreakInterval === modelData ? root.accent : root.fg
-                onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, modelData)
+            WheelHandler {
+              onWheel: function(event) {
+                if (event.angleDelta.y > 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval + 1)
+                } else if (event.angleDelta.y < 0) {
+                  root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval - 1)
+                }
               }
             }
           }
-        }
 
-        PanelSeparator { foreground: root.fg }
-
-        // Privacy Mode Switch
-        Row {
-          width: parent.width
-          Text {
-            width: parent.width - privacyModeToggle.width - Style.space(10)
+          Button {
+            width: Style.space(24)
+            height: Style.space(24)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.i18n("状态栏隐私模式 (仅暴露首字/词)", "Status Bar Privacy (First char/word only)")
-            color: root.fg
-            opacity: 0.8
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
+            text: "+"
+            fontSize: Style.font.caption
+            horizontalPadding: 0
+            bordered: true
+            onClicked: root.savePomoConfig(root.pomoWorkMins, root.pomoShortBreakMins, root.pomoLongBreakMins, root.pomoLongBreakInterval + 1)
           }
-          ToggleSwitch {
-            id: privacyModeToggle
-            checked: root.privacyMode
-            trackHeight: 18
-            accent: root.accent
-            foreground: root.fg
-            cursorRing: false
+
+          Text {
             anchors.verticalCenter: parent.verticalCenter
-            onToggled: root.togglePrivacyMode()
+            text: root.i18n("轮专注 (1-12)", "cycles (1-12)")
+            color: root.fg
+            opacity: 0.55
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
           }
         }
 
-        // Language Switch
+        // Action Buttons: Reset to default + Save
         Row {
           width: parent.width
-          Text {
-            width: parent.width - langSettingsToggle.width - Style.space(10)
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.i18n("界面语言 (中文 / English)", "Interface Language (ZH / EN)")
-            color: root.fg
-            opacity: 0.8
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
-          ToggleSwitch {
-            id: langSettingsToggle
-            checked: root.isChinese
-            trackHeight: 18
-            accent: root.accent
+          spacing: Style.space(8)
+          readonly property real actionBtnW: Math.floor((width - spacing) / 2)
+
+          Button {
+            width: parent.actionBtnW
+            text: root.i18n("恢复默认 (25/5/15/4)", "Reset Default (25/5/15/4)")
             foreground: root.fg
-            cursorRing: false
-            anchors.verticalCenter: parent.verticalCenter
-            onToggled: root.toggleLanguage()
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            bordered: true
+            onClicked: root.resetPomoConfigToDefault()
+          }
+
+          Button {
+            width: parent.actionBtnW
+            text: root.i18n("保存设置", "Save Settings")
+            foreground: root.fg
+            accent: root.accent
+            fontFamily: root.fontFamily
+            fontSize: Style.font.caption
+            bordered: true
+            onClicked: root.applyPomoInputs()
           }
         }
 
@@ -1080,10 +1095,10 @@ BarWidget {
       // --- Selected Task Details Section ---
       Column {
         width: parent.width
-        spacing: Style.space(12)
+        spacing: Style.space(8)
         visible: !root.showPomoSettings && root.selectedTask !== null
 
-        // Header Row: Task Title on left, Privacy + Settings + Language on top-right
+        // Header Row: Task Title on left, Settings + Language on top-right
         Row {
           width: parent.width
           height: Math.max(taskTitleText.implicitHeight, headerControlsRow.implicitHeight)
@@ -1092,7 +1107,7 @@ BarWidget {
             id: taskTitleText
             width: parent.width - headerControlsRow.width - Style.space(10)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + (root.privacyMode ? root.maskTitle(root.selectedTask.title) : root.selectedTask.title) : ""
+            text: root.selectedTask ? root.taskIcon(root.selectedTask) + "  " + (root.selectedTask.title || "") : ""
             color: root.fg
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
@@ -1104,22 +1119,6 @@ BarWidget {
             id: headerControlsRow
             spacing: Style.space(6)
             anchors.verticalCenter: parent.verticalCenter
-
-            // Quick Privacy Toggle
-            Button {
-              width: Style.space(26)
-              height: Style.space(22)
-              text: root.privacyMode ? "󰈉" : "󰈈"
-              fontSize: Style.font.bodySmall
-              horizontalPadding: 0
-              bordered: true
-              accent: root.privacyMode ? root.accent : root.fg
-              opacity: root.privacyMode ? 1.0 : 0.6
-              tooltipText: root.privacyMode ?
-                root.i18n("关闭隐私模式", "Turn off Privacy Mode") :
-                root.i18n("开启隐私模式", "Turn on Privacy Mode")
-              onClicked: root.togglePrivacyMode()
-            }
 
             // Pomodoro Settings Toggle
             Button {
@@ -1164,7 +1163,7 @@ BarWidget {
         // Key-Value Grid: fixed label width for rock-solid visual baseline in both ZH and EN
         Column {
           width: parent.width
-          spacing: Style.space(6)
+          spacing: Style.space(4)
 
           Row {
             width: parent.width
@@ -1204,33 +1203,12 @@ BarWidget {
               font.pixelSize: Style.font.bodySmall
             }
           }
-
-          Row {
-            width: parent.width
-            spacing: Style.space(12)
-            Text {
-              width: Style.space(72)
-              text: root.i18n("标签", "Tags")
-              color: root.fg
-              opacity: 0.55
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-            Text {
-              width: parent.width - Style.space(84)
-              text: root.selectedTask ? String(root.selectedTask.tags || "-") : "-"
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              elide: Text.ElideRight
-            }
-          }
         }
 
         // Action Buttons: equal width distribution across the panel width
         Row {
           width: parent.width
-          spacing: Style.space(8)
+          spacing: Style.space(6)
           readonly property real btnW: Math.floor((width - 3 * spacing) / 4)
 
           Button {
@@ -1282,7 +1260,7 @@ BarWidget {
       // If no task is selected, show Upcoming Tasks list
       Column {
         width: parent.width
-        spacing: Style.space(8)
+        spacing: Style.space(6)
         visible: !root.showPomoSettings && root.selectedTask === null && root.displayTasks.length > 0
 
         // Header with list title and top-right tools
@@ -1306,22 +1284,6 @@ BarWidget {
             id: emptyHeaderControlsRow
             spacing: Style.space(6)
             anchors.verticalCenter: parent.verticalCenter
-
-            // Quick Privacy Toggle
-            Button {
-              width: Style.space(26)
-              height: Style.space(22)
-              text: root.privacyMode ? "󰈉" : "󰈈"
-              fontSize: Style.font.bodySmall
-              horizontalPadding: 0
-              bordered: true
-              accent: root.privacyMode ? root.accent : root.fg
-              opacity: root.privacyMode ? 1.0 : 0.6
-              tooltipText: root.privacyMode ?
-                root.i18n("关闭隐私模式", "Turn off Privacy Mode") :
-                root.i18n("开启隐私模式", "Turn on Privacy Mode")
-              onClicked: root.togglePrivacyMode()
-            }
 
             // Pomodoro Settings Toggle
             Button {
@@ -1368,11 +1330,11 @@ BarWidget {
           delegate: Item {
             property var taskData: modelData
             width: popupContent.width
-            implicitHeight: Style.space(26)
+            implicitHeight: Style.space(24)
 
             Row {
               anchors.fill: parent
-              spacing: Style.space(8)
+              spacing: Style.space(6)
               Text {
                 text: root.taskIcon(taskData)
                 font.family: root.fontFamily
@@ -1380,12 +1342,12 @@ BarWidget {
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
-                text: String(root.privacyMode ? root.maskTitle(taskData.title) : (taskData.title || ""))
+                text: String(taskData.title || "")
                 color: root.isUrgent(taskData) ? root.urgent : root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
                 elide: Text.ElideRight
-                width: parent.width - Style.space(120)
+                width: parent.width - Style.space(100)
                 anchors.verticalCenter: parent.verticalCenter
               }
               Text {
@@ -1413,12 +1375,12 @@ BarWidget {
         visible: !root.showPomoSettings
       }
 
-      // --- Bottom Quick Actions Row (3 buttons) ---
+      // --- Bottom Quick Actions Row (2 buttons) ---
       Row {
         width: parent.width
-        spacing: Style.space(8)
+        spacing: Style.space(6)
         visible: !root.showPomoSettings
-        readonly property real bBtnW: Math.floor((width - 2 * spacing) / 3)
+        readonly property real bBtnW: Math.floor((width - spacing) / 2)
 
         Button {
           width: parent.bBtnW
@@ -1430,17 +1392,6 @@ BarWidget {
           horizontalPadding: Style.space(4)
           bordered: true
           onClicked: root.launchFlashCapture()
-        }
-
-        Button {
-          width: parent.bBtnW
-          text: root.i18n("⚙ 番茄设置", "⚙ Settings")
-          foreground: root.fg
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          horizontalPadding: Style.space(4)
-          bordered: true
-          onClicked: root.showPomoSettings = true
         }
 
         Button {
@@ -1548,5 +1499,26 @@ BarWidget {
     interval: 250
     repeat: false
     onTriggered: root.launchFlashCapture()
+  }
+
+  // Auto-dismiss popup when inactive or mouse leaves
+  Timer {
+    id: autoDismissTimer
+    interval: root.autoDismissSecs * 1000
+    repeat: false
+    running: root.popupOpen && root.autoDismissSecs > 0 && !root.showPomoSettings && !popup.containsMouse
+    onTriggered: {
+      if (root.popupOpen && !popup.containsMouse && !root.showPomoSettings) {
+        root.close()
+      }
+    }
+  }
+
+  // Dismiss popup on workspace switch so it does not strand across screens/workspaces
+  Connections {
+    target: Hyprland
+    function onFocusedWorkspaceChanged() {
+      if (root.popupOpen) root.close()
+    }
   }
 }
