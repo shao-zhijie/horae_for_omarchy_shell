@@ -36,7 +36,7 @@ An [Omarchy](https://omarchy.org/) Quattro shell bar widget that brings upcoming
 - Omarchy Quattro shell
 - [Horae](https://github.com/zhaohang1205/horae) CLI installed:
   ```bash
-  cargo install --git https://github.com/zhaohang1205/horae.git
+  cargo install --git https://github.com/zhaohang1205/horae.git --rev ef187817ec29411907aed5366a26b1167aaf417e
   ```
 
 ## Installation
