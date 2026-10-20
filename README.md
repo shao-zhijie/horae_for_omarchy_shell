@@ -30,10 +30,14 @@ An elegant, lightweight, and blazingly fast [Omarchy](https://omarchy.org/) Quat
 ## Prerequisites
 
 - Omarchy Quattro shell
+- Private configuration directory with restricted permissions (`0700`):
+  ```bash
+  mkdir -p -m 700 ~/.config/horae
+  ```
 - [Horae](https://github.com/zhaohang1205/horae) CLI installed:
 
   ```bash
-  cargo install --git https://github.com/zhaohang1205/horae.git --rev ef187817ec29411907aed5366a26b1167aaf417e
+  cargo install --git https://github.com/zhaohang1205/horae.git --rev 5e500ad029d7445788d9c0eeb80f58d87ba37611
   ```
 
 ## Installation & Setup

@@ -30,10 +30,14 @@
 ## 前置依赖
 
 - Omarchy Quattro shell
+- 创建具有安全权限限制的私有配置目录（`0700`）：
+  ```bash
+  mkdir -p -m 700 ~/.config/horae
+  ```
 - 已安装 [Horae](https://github.com/zhaohang1205/horae) CLI 工具：
 
   ```bash
-  cargo install --git https://github.com/zhaohang1205/horae.git --rev ef187817ec29411907aed5366a26b1167aaf417e
+  cargo install --git https://github.com/zhaohang1205/horae.git --rev 5e500ad029d7445788d9c0eeb80f58d87ba37611
   ```
 
 ## 安装与配置
