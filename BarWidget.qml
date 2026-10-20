@@ -119,7 +119,7 @@ BarWidget {
   readonly property bool pomoRunning: pomoPhase !== "idle"
   readonly property bool pomoWorking: pomoPhase === "work"
   readonly property bool pomoBreaking: pomoRunning && !pomoWorking
-  readonly property string workingTaskId: pomoTaskId
+  readonly property string workingTaskId: pomoRunning ? pomoTaskId : ""
 
   // Instrument colors: focus = urgent, breaks = accent, idle = plain
   readonly property color phaseColor: !pomoRunning ? textColor : pomoWorking ? urgent : accent
@@ -148,6 +148,9 @@ BarWidget {
     var total = pomoEndTs - pomoStartTs
     pomoRemainingSecs = Math.max(0, Math.ceil((pomoEndTs - now) / 1000))
     pomoRemainingFraction = total > 0 ? Math.max(0, Math.min(1, (pomoEndTs - now) / total)) : 0
+    if (pomoRemainingSecs <= 0) {
+      root.refreshPomo()
+    }
   }
 
   // Canonical phase names: idle | work | short_break | long_break.
@@ -164,8 +167,8 @@ BarWidget {
   function applyPomoState(state) {
     if (!state || typeof state !== "object") return
     pomoPhase = normalizePhase(state.phase)
-    pomoTaskId = String(state.task_id || "")
-    pomoTaskTitle = String(state.task_title || "")
+    pomoTaskId = pomoPhase !== "idle" ? String(state.task_id || "") : ""
+    pomoTaskTitle = pomoPhase !== "idle" ? String(state.task_title || "") : ""
     pomoStartTs = Number(state.start_ts || 0)
     pomoEndTs = Number(state.end_ts || 0)
     pomoCycle = Number(state.cycle || 0)
@@ -484,7 +487,7 @@ BarWidget {
     if (workingTaskId !== "") {
       focused = candidates.filter(function(task) { return String(task.id) === workingTaskId })[0]
     }
-    if (!focused && pomoTaskTitle) {
+    if (!focused && pomoRunning && pomoTaskTitle) {
       focused = candidates.filter(function(task) { return String(task.title) === String(pomoTaskTitle) })[0]
     }
     if (focused) {
