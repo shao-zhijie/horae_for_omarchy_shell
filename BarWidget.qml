@@ -59,7 +59,10 @@ BarWidget {
     currentLang = next
     var sql = "INSERT INTO settings (key, val) VALUES ('lang', '" + next + "') ON CONFLICT(key) DO UPDATE SET val='" + next + "';"
     var cmd = "sqlite3 " + shellArg(root.dataDir + "/horae.db") + " " + shellArg(sql)
-    if (bar) bar.run(cmd)
+    if (bar) {
+      bar.run(cmd)
+      bar.run("omarchy-shell shell setBarWidget " + shellArg(root.moduleName) + " 'lang' " + shellArg(next) + " '{}'")
+    }
     refreshTimer.restart()
   }
 
@@ -71,7 +74,10 @@ BarWidget {
     var val = privacyMode ? "1" : "0"
     var sql = "INSERT INTO settings (key, val) VALUES ('privacy_mode', '" + val + "') ON CONFLICT(key) DO UPDATE SET val='" + val + "';"
     var cmd = "sqlite3 " + shellArg(root.dataDir + "/horae.db") + " " + shellArg(sql)
-    if (bar) bar.run(cmd)
+    if (bar) {
+      bar.run(cmd)
+      bar.run("omarchy-shell shell setBarWidget " + shellArg(root.moduleName) + " 'privacyMode' " + shellArg(privacyMode ? "true" : "false") + " '{}'")
+    }
   }
 
   function maskTitle(title) {
@@ -121,8 +127,8 @@ BarWidget {
   readonly property bool pomoBreaking: pomoRunning && !pomoWorking
   readonly property string workingTaskId: pomoRunning ? pomoTaskId : ""
 
-  // Instrument colors: focus = urgent, breaks = accent, idle = plain
-  readonly property color phaseColor: !pomoRunning ? textColor : pomoWorking ? urgent : accent
+  // Instrument colors: focus/breaks = accent, idle = plain
+  readonly property color phaseColor: !pomoRunning ? textColor : accent
 
   // Pomodoro configuration (synced to pomo.json config block)
   property bool showPomoSettings: false
@@ -224,10 +230,12 @@ BarWidget {
     pomoLongBreakMins = Math.max(1, Math.min(90, l))
     pomoLongBreakInterval = Math.max(1, Math.min(12, i))
     var dataFile = root.dataDir + "/pomo.json"
-    var jqCmd = "[ -f " + shellArg(dataFile) + " ] || echo '{}' > " + shellArg(dataFile) + " ; " +
+    var tmpFile = dataFile + ".tmp." + Date.now()
+    var jqCmd = "[ -f " + shellArg(dataFile) + " ] || (touch " + shellArg(dataFile) + " && chmod 600 " + shellArg(dataFile) + " && echo '{}' > " + shellArg(dataFile) + ") ; " +
+      "chmod 600 " + shellArg(dataFile) + " 2>/dev/null || true ; " +
       "jq --argjson w " + pomoWorkMins + " --argjson s " + pomoShortBreakMins + " --argjson l " + pomoLongBreakMins + " --argjson i " + pomoLongBreakInterval +
       " '.config = ((.config // {}) + {\"work_mins\": $w, \"short_break_mins\": $s, \"long_break_mins\": $l, \"long_break_interval\": $i})' " +
-      shellArg(dataFile) + " > " + shellArg(dataFile + ".tmp") + " && cat " + shellArg(dataFile + ".tmp") + " > " + shellArg(dataFile) + " && rm -f " + shellArg(dataFile + ".tmp")
+      shellArg(dataFile) + " > " + shellArg(tmpFile) + " && chmod 600 " + shellArg(tmpFile) + " && mv -f " + shellArg(tmpFile) + " " + shellArg(dataFile)
     if (bar && typeof bar.run === "function") {
       bar.run(jqCmd)
     } else {
@@ -440,7 +448,6 @@ BarWidget {
 
   function statusColor(task) {
     if (!task) return root.dim
-    if (workingTaskId !== "" && String(task.id) === workingTaskId) return root.accent
     return isUrgent(task) ? root.urgent : root.dim
   }
 
@@ -483,17 +490,6 @@ BarWidget {
   function buildDisplayTasks() {
     var candidates = tasks.filter(inWindow).slice()
     candidates.sort(function(a, b) { return taskTime(a) - taskTime(b) })
-    var focused = null
-    if (workingTaskId !== "") {
-      focused = candidates.filter(function(task) { return String(task.id) === workingTaskId })[0]
-    }
-    if (!focused && pomoRunning && pomoTaskTitle) {
-      focused = candidates.filter(function(task) { return String(task.title) === String(pomoTaskTitle) })[0]
-    }
-    if (focused) {
-      candidates = candidates.filter(function(task) { return task !== focused })
-      candidates.unshift(focused)
-    }
     var next = candidates.slice(0, displayMax)
     if (next.length === displayTasks.length) {
       var same = true
@@ -632,18 +628,15 @@ BarWidget {
     height: root.capsuleHeight
     width: Math.min(root.maxBarWidth, row.implicitWidth + Style.space(16))
     radius: height / 2
-    color: root.pomoRunning ? Util.alpha(root.phaseColor, 0.10) : (capsuleHover.hovered ? Util.alpha(root.fg, 0.10) : Util.alpha(root.fg, 0.05))
-    border.width: 1
-    border.color: root.pomoRunning ? Util.alpha(root.phaseColor, 0.35) : (capsuleHover.hovered ? Util.alpha(root.fg, 0.22) : Util.alpha(root.fg, 0.10))
+    color: capsuleHover.hovered ? Util.alpha(root.fg, 0.10) : Util.alpha(root.fg, 0.05)
+    border.width: 0
+    border.color: "transparent"
     clip: true
 
     Behavior on width {
       NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
     }
     Behavior on color {
-      ColorAnimation { duration: 180 }
-    }
-    Behavior on border.color {
       ColorAnimation { duration: 180 }
     }
 
@@ -843,7 +836,7 @@ BarWidget {
         anchors.topMargin: Style.space(2)
         anchors.bottomMargin: Style.space(2)
         radius: height / 2
-        color: taskItem.hovering ? Util.alpha(taskItem.working ? root.accent : root.fg, 0.12) : (taskItem.working ? Util.alpha(root.accent, 0.08) : "transparent")
+        color: taskItem.hovering ? Util.alpha(root.fg, 0.12) : "transparent"
         Behavior on color { ColorAnimation { duration: 150 } }
       }
 
@@ -892,13 +885,13 @@ BarWidget {
           }
         }
 
-        // 2. 时间/倒计时区：专注时显示实时倒计时，否则显示计划时间
+        // 2. 时间/倒计时区：专注时显示实时倒计时，否则显示计划时间（颜色严格基于是否到期判断）
         Text {
           id: taskTimeText
           visible: taskItem.timeStr !== ""
           anchors.verticalCenter: parent.verticalCenter
           text: taskItem.timeStr
-          color: taskItem.working ? root.phaseColor : (taskItem.urgentTask ? root.urgent : root.textColor)
+          color: taskItem.urgentTask ? root.urgent : root.textColor
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: taskItem.working
@@ -906,7 +899,7 @@ BarWidget {
           Behavior on color { ColorAnimation { duration: 200 } }
         }
 
-        // 3. 标题文本（隐私模式下隐藏，超出时支持平滑跑马灯）
+        // 3. 标题文本（隐私模式下隐藏，超出时支持平滑跑马灯，颜色严格基于是否到期判断）
         Item {
           id: titleClip
           visible: !root.privacyMode && taskItem.clipTitleW > 0
@@ -919,7 +912,7 @@ BarWidget {
             id: titleText
             anchors.verticalCenter: parent.verticalCenter
             text: String(taskItem.task.title || "(untitled)")
-            color: taskItem.working ? root.accent : (taskItem.urgentTask ? root.urgent : root.textColor)
+            color: taskItem.urgentTask ? root.urgent : root.textColor
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: taskItem.working
@@ -1554,10 +1547,10 @@ BarWidget {
         visible: !root.showPomoSettings && root.selectedTask !== null
         implicitHeight: selectedCol.implicitHeight + Style.space(18)
         radius: Style.cornerRadius > 0 ? Style.cornerRadius : 8
-        readonly property bool isWorkingOnThis: root.workingTaskId !== "" && root.selectedTask !== null && String(root.selectedTask.id) === root.workingTaskId
-        color: isWorkingOnThis ? Util.alpha(root.urgent, 0.06) : Util.alpha(root.accent, 0.04)
+        readonly property bool isUrgentSelected: root.selectedTask !== null && root.isUrgent(root.selectedTask)
+        color: isUrgentSelected ? Util.alpha(root.urgent, 0.06) : Util.alpha(root.accent, 0.04)
         border.width: 1
-        border.color: isWorkingOnThis ? Util.alpha(root.urgent, 0.36) : Util.alpha(root.accent, 0.24)
+        border.color: isUrgentSelected ? Util.alpha(root.urgent, 0.36) : Util.alpha(root.accent, 0.24)
 
         Column {
           id: selectedCol
@@ -1893,6 +1886,16 @@ BarWidget {
     printErrors: false
     onLoaded: root.refreshTasks()
     onLoadFailed: root.refreshTasks()
+    onFileChanged: root.refreshTasks()
+  }
+
+  // SQLite WAL mode writes transactions into horae.db-wal
+  FileView {
+    id: tasksWalWatcher
+    path: root.dataDir + "/horae.db-wal"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.refreshTasks()
     onFileChanged: root.refreshTasks()
   }
 
