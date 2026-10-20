@@ -1641,49 +1641,23 @@ BarWidget {
 
           Row {
             width: parent.width
-            spacing: Style.space(12)
+            spacing: Style.space(4)
             anchors.leftMargin: Style.space(2)
 
-            Row {
-              spacing: Style.space(4)
+            Text {
+              text: "󰃰"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
               anchors.verticalCenter: parent.verticalCenter
-
-              Text {
-                text: "󰃰"
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                text: root.selectedTask ? (root.timeLabel(root.selectedTask) + ": " + root.formatDue(root.taskTime(root.selectedTask))) : "-"
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                anchors.verticalCenter: parent.verticalCenter
-              }
             }
 
-            Rectangle {
-              visible: selectedTaskCard.isWorkingOnThis
-              implicitWidth: workingBadgeText.implicitWidth + Style.space(10)
-              implicitHeight: Style.space(18)
-              radius: height / 2
-              color: Util.alpha(root.urgent, 0.16)
-              border.width: 1
-              border.color: Util.alpha(root.urgent, 0.4)
+            Text {
+              text: root.selectedTask ? (root.timeLabel(root.selectedTask) + ": " + root.formatDue(root.taskTime(root.selectedTask))) : "-"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
               anchors.verticalCenter: parent.verticalCenter
-
-              Text {
-                id: workingBadgeText
-                anchors.centerIn: parent
-                text: "🍅 " + root.formatCountdown(root.pomoRemainingSecs)
-                color: root.urgent
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
             }
           }
 
