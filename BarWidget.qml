@@ -888,6 +888,7 @@ BarWidget {
         // 2. 时间/倒计时区：专注时显示实时倒计时，否则显示计划时间（颜色严格基于是否到期判断）
         Text {
           id: taskTimeText
+          textFormat: Text.PlainText
           visible: taskItem.timeStr !== ""
           anchors.verticalCenter: parent.verticalCenter
           text: taskItem.timeStr
@@ -910,6 +911,7 @@ BarWidget {
 
           Text {
             id: titleText
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: String(taskItem.task.title || "(untitled)")
             color: taskItem.urgentTask ? root.urgent : root.textColor
@@ -1572,6 +1574,7 @@ BarWidget {
             Text {
               width: parent.width - Style.space(26) - heroStatusPill.width - closeSelectBtn.width - parent.spacing * 3
               text: root.selectedTask ? String(root.selectedTask.title || "") : ""
+              textFormat: Text.PlainText
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -1592,6 +1595,7 @@ BarWidget {
 
               Text {
                 id: heroStatusText
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 text: root.selectedTask ? root.taskStatus(root.selectedTask) : ""
                 color: root.statusColor(root.selectedTask)
@@ -1634,6 +1638,7 @@ BarWidget {
 
             Text {
               text: root.selectedTask ? (root.timeLabel(root.selectedTask) + ": " + root.formatDue(root.taskTime(root.selectedTask))) : "-"
+              textFormat: Text.PlainText
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -1786,6 +1791,7 @@ BarWidget {
               Text {
                 width: parent.width - Style.space(30) - taskRowTimePill.width - parent.spacing * 2
                 text: String(taskRow.taskData.title || "")
+                textFormat: Text.PlainText
                 color: root.isUrgent(taskRow.taskData) ? root.urgent : root.fg
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
@@ -1804,6 +1810,7 @@ BarWidget {
 
                 Text {
                   id: taskRowTime
+                  textFormat: Text.PlainText
                   anchors.centerIn: parent
                   text: root.formatDueTime(root.taskTime(taskRow.taskData))
                   color: root.dim
