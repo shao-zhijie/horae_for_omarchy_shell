@@ -1380,22 +1380,6 @@ BarWidget {
               }
             }
           }
-                  implicitHeight: Style.space(18)
-                  radius: Style.cornerRadius > 0 ? Math.min(Style.cornerRadius, 4) : 4
-                  color: Util.alpha(root.fg, 0.06)
-
-                  Text {
-                    id: statTotal
-                    anchors.centerIn: parent
-                    text: root.i18n("累计 " + root.pomoTotalCount, "Total " + root.pomoTotalCount)
-                    color: root.dim
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
-              }
-            }
-          }
 
           // Hero actions: primary session control + quick capture + TUI
           Row {
