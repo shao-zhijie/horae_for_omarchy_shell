@@ -37,7 +37,7 @@ An elegant, lightweight, and blazingly fast [Omarchy](https://omarchy.org/) Quat
 - [Horae](https://github.com/zhaohang1205/horae) CLI installed:
 
   ```bash
-  cargo install --git https://github.com/zhaohang1205/horae.git --rev 5774a24d3395539dff43a4e0dbd48e59d050e76f
+  cargo install --git https://github.com/zhaohang1205/horae.git --rev c4c428bcff928758efb58d8687891e58b55d5c6a
   ```
 
 ## Installation & Setup
