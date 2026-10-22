@@ -1,7 +1,19 @@
+# OS & Editor
 .DS_Store
+Thumbs.db
 *~
 *.swp
 *.bak
+.vscode/
+.idea/
+
+# Temp & build artifacts
 .add.tmp.*
 target/
 node_modules/
+*.tmp
+*.log
+
+# Social / chat poster generation artifacts (not part of the shell plugin)
+*poster.html
+*showcase_vertical*.png

@@ -202,8 +202,9 @@ BarWidget {
   // Fallback parser for `horae pomo waybar` output (used only when pomo.json
   // is unavailable); maps its class/text payload back onto the session state.
   function applyPomo(raw) {
+    if (!raw || String(raw).trim() === "") return
     try {
-      var parsed = JSON.parse(String(raw || "{}"))
+      var parsed = JSON.parse(String(raw))
       if (!parsed || typeof parsed !== "object") return
       pomoPhase = normalizePhase(parsed.class)
       pomoTaskId = String(parsed.id || "")
@@ -348,11 +349,15 @@ BarWidget {
   property string selectedTaskId: ""
   property bool popupOpen: false
 
-  readonly property var selectedTask: (function() {
-    for (var i = 0; i < displayTasks.length; i++)
-      if (String(displayTasks[i].id) === selectedTaskId) return displayTasks[i]
+  function findSelectedTask(tasksList, id) {
+    if (!id || !tasksList) return null
+    for (var i = 0; i < tasksList.length; i++) {
+      if (String(tasksList[i].id) === id) return tasksList[i]
+    }
     return null
-  })()
+  }
+
+  readonly property var selectedTask: findSelectedTask(displayTasks, selectedTaskId)
 
   readonly property real capsuleHeight: Math.max(22, root.barSize - Style.space(6))
   readonly property int taskSlotWidth: displayTasks.length === 0 ? 0
@@ -470,18 +475,21 @@ BarWidget {
   }
 
   function applyTasks(raw) {
+    if (!raw || String(raw).trim() === "") return
     try {
-      var parsed = JSON.parse(String(raw || "[]"))
-      tasks = Array.isArray(parsed) ? parsed : []
-      tasks = tasks.filter(function(t) { return t && t.class && t.class !== "alarm-none" })
+      var parsed = JSON.parse(String(raw))
+      if (!Array.isArray(parsed)) return
+      var list = parsed.filter(function(t) { return t && t.class && t.class !== "alarm-none" })
+      tasks = list
+      buildDisplayTasks()
     } catch (error) {
-      tasks = []
+      // Preserve existing tasks on parse/stream error to avoid visual flicker
     }
-    buildDisplayTasks()
   }
 
   function displayKey(task) {
-    return String(task.id) + "|" + taskTime(task) + "|" +
+    if (!task) return ""
+    return String(task.id || "") + "|" + String(task.title || "") + "|" + taskTime(task) + "|" +
       (isUrgent(task) ? 1 : 0) + "|" +
       (isOverdue(task) ? 1 : 0) + "|" +
       (workingTaskId !== "" && String(task.id) === workingTaskId ? 1 : 0)
@@ -489,7 +497,11 @@ BarWidget {
 
   function buildDisplayTasks() {
     var candidates = tasks.filter(inWindow).slice()
-    candidates.sort(function(a, b) { return taskTime(a) - taskTime(b) })
+    candidates.sort(function(a, b) {
+      var diff = taskTime(a) - taskTime(b)
+      if (diff !== 0) return diff
+      return String(a.id || "").localeCompare(String(b.id || ""))
+    })
     var next = candidates.slice(0, displayMax)
     if (next.length === displayTasks.length) {
       var same = true
@@ -1833,8 +1845,15 @@ BarWidget {
     }
   }
 
+  property bool tasksRefreshPending: false
+  property bool pomoRefreshPending: false
+
   function refreshTasks() {
-    if (tasksProc.running) tasksProc.running = false
+    if (tasksProc.running) {
+      tasksRefreshPending = true
+      return
+    }
+    tasksRefreshPending = false
     tasksProc.running = true
   }
 
@@ -1846,7 +1865,11 @@ BarWidget {
       applyPomoFile(raw)
       return
     }
-    if (pomoProc.running) pomoProc.running = false
+    if (pomoProc.running) {
+      pomoRefreshPending = true
+      return
+    }
+    pomoRefreshPending = false
     pomoProc.running = true
   }
 
@@ -1862,6 +1885,12 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.applyTasks(text)
     }
+    onExited: {
+      if (root.tasksRefreshPending) {
+        root.tasksRefreshPending = false
+        refreshTimer.restart()
+      }
+    }
   }
 
   Process {
@@ -1870,6 +1899,12 @@ BarWidget {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyPomo(text)
+    }
+    onExited: {
+      if (root.pomoRefreshPending) {
+        root.pomoRefreshPending = false
+        pomoRefreshTimer.restart()
+      }
     }
   }
 
@@ -1881,8 +1916,7 @@ BarWidget {
     path: root.dataDir + "/pomo.json"
     watchChanges: true
     printErrors: false
-    onLoaded: root.refreshPomo()
-    onLoadFailed: root.refreshPomo()
+    onLoaded: pomoRefreshTimer.restart()
     onFileChanged: reload()
   }
 
@@ -1891,9 +1925,8 @@ BarWidget {
     path: root.dataDir + "/horae.db"
     watchChanges: true
     printErrors: false
-    onLoaded: root.refreshTasks()
-    onLoadFailed: root.refreshTasks()
-    onFileChanged: root.refreshTasks()
+    onLoaded: refreshTimer.restart()
+    onFileChanged: refreshTimer.restart()
   }
 
   // SQLite WAL mode writes transactions into horae.db-wal
@@ -1902,15 +1935,15 @@ BarWidget {
     path: root.dataDir + "/horae.db-wal"
     watchChanges: true
     printErrors: false
-    onLoaded: root.refreshTasks()
-    onFileChanged: root.refreshTasks()
+    onLoaded: refreshTimer.restart()
+    onFileChanged: refreshTimer.restart()
   }
 
   Timer {
     interval: 60000
     running: true
     repeat: true
-    triggeredOnStart: true
+    triggeredOnStart: false
     onTriggered: {
       root.refreshTasks()
       if (!root.pomoRunning) root.refreshPomo()
