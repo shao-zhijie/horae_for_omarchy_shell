@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.zhaohang1205.horae-tasks",
   "name": "Horae Tasks & Pomodoro",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "alex zhao",
   "license": "MIT",
   "description": "Glance at upcoming GTD tasks, capture thoughts instantly, and stay in flow with smart Pomodoro focus timers right on your bar. Elegant, lightweight, and blazingly fast with a Rust backend.",
