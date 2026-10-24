@@ -24,8 +24,14 @@ BarWidget {
   readonly property string profile: String(setting("profile", "")).trim()
   readonly property int alarmLimit: Math.max(1, Math.min(20, Number(setting("limit", 10))))
   readonly property int displayMax: Math.max(1, Math.min(5, Number(setting("displayMax", 2))))
-  readonly property int windowBackMs: 10 * 3600 * 1000
-  readonly property int windowFwdMs: 24 * 3600 * 1000
+  readonly property int windowBackHours: Number(setting("windowBackHours", 10))
+  readonly property int windowFwdHours: Number(setting("windowFwdHours", 24))
+  readonly property int windowBackMs: windowBackHours * 3600 * 1000
+  readonly property int windowFwdMs: windowFwdHours * 3600 * 1000
+  readonly property string windowScopeText: root.i18n(
+    "过去 " + windowBackHours + "h ~ 未来 " + windowFwdHours + "h",
+    "-" + windowBackHours + "h ~ +" + windowFwdHours + "h"
+  )
   readonly property int maxBarWidth: Math.max(160, Math.round(Style.space(Number(setting("maxWidth", 420)))))
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -2007,34 +2013,71 @@ BarWidget {
 
           Item {
             width: parent.width
-            height: Style.space(20)
+            height: Style.space(22)
             visible: root.windowTasks.length > 0
 
-            PlainText {
+            Row {
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
-              text: root.i18n("近期排程 / 待办队列", "Upcoming Tasks Queue")
-              color: root.dim
-              font.pixelSize: Style.font.caption
-              font.bold: true
+              spacing: Style.space(6)
+
+              PlainText {
+                text: root.i18n("近期排程 / 待办队列", "Upcoming Tasks Queue")
+                color: root.fg
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Rectangle {
+                id: windowScopePill
+                implicitWidth: windowScopeRow.implicitWidth + Style.space(8)
+                implicitHeight: Style.space(16)
+                radius: height / 2
+                color: Util.alpha(root.fg, 0.06)
+                border.width: 1
+                border.color: Util.alpha(root.fg, 0.12)
+                anchors.verticalCenter: parent.verticalCenter
+
+                Row {
+                  id: windowScopeRow
+                  anchors.centerIn: parent
+                  spacing: Style.space(3)
+
+                  PlainText {
+                    text: "󰃰"
+                    color: root.accent
+                    font.pixelSize: Style.font.caption
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+
+                  PlainText {
+                    text: root.windowScopeText
+                    color: root.dim
+                    font.pixelSize: Style.font.caption
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                }
+              }
             }
 
             TabularText {
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: root.i18n(
-                "窗口内 " + root.windowTasks.length + " 项",
-                root.windowTasks.length + (root.windowTasks.length === 1 ? " task in window" : " tasks in window")
+                "共 " + root.windowTasks.length + " 项",
+                root.windowTasks.length + (root.windowTasks.length === 1 ? " task" : " tasks")
               )
               color: root.dim
               font.pixelSize: Style.font.caption
+              font.bold: true
             }
           }
 
-          // Empty state when no tasks are queued
+          // Empty state when no tasks are queued in active window
           Item {
             width: parent.width
-            height: Style.space(56)
+            height: Style.space(64)
             visible: root.windowTasks.length === 0
 
             Rectangle {
@@ -2050,15 +2093,15 @@ BarWidget {
               spacing: Style.space(10)
 
               Rectangle {
-                width: Style.space(24)
-                height: Style.space(24)
+                width: Style.space(26)
+                height: Style.space(26)
                 radius: width / 2
                 color: Util.alpha(root.accent, 0.14)
                 anchors.verticalCenter: parent.verticalCenter
 
                 PlainText {
                   anchors.centerIn: parent
-                  text: "󰄬"
+                  text: "󰃰"
                   color: root.accent
                   font.pixelSize: Style.font.caption
                   font.bold: true
@@ -2067,17 +2110,23 @@ BarWidget {
 
               Column {
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 1
+                spacing: Style.space(2)
 
                 PlainText {
-                  text: root.i18n("暂无临近排程，享受心流", "No upcoming tasks, stay in flow")
+                  text: root.i18n(
+                    "时间窗口（" + root.windowScopeText + "）内无待办",
+                    "No tasks in active window (" + root.windowScopeText + ")"
+                  )
                   color: root.fg
                   font.pixelSize: Style.font.bodySmall
                   font.bold: true
                 }
 
                 PlainText {
-                  text: root.i18n("随时按 C 或点击“闪念录入”捕捉新想法", "Press C or click 'Capture' anytime to record ideas")
+                  text: root.i18n(
+                    "仅展示过去 " + root.windowBackHours + "h 逾期与未来 " + root.windowFwdHours + "h 排程 · 更多请打开 TUI",
+                    "Showing past " + root.windowBackHours + "h overdue to next " + root.windowFwdHours + "h scheduled · Open TUI for all"
+                  )
                   color: root.dim
                   font.pixelSize: Style.font.caption
                 }
@@ -2266,6 +2315,36 @@ BarWidget {
                     }
                   }
                 }
+              }
+            }
+          }
+
+          // Subtle footer indicating active time window rules
+          Item {
+            width: parent.width
+            height: Style.space(16)
+            visible: root.windowTasks.length > 0
+
+            Row {
+              anchors.centerIn: parent
+              spacing: Style.space(4)
+              opacity: 0.65
+
+              PlainText {
+                text: "󰋽"
+                color: root.dim
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              PlainText {
+                text: root.i18n(
+                  "活跃窗口: " + root.windowScopeText + "（仅展示过去 " + root.windowBackHours + "h 逾期与未来 " + root.windowFwdHours + "h 排程）",
+                  "Window: " + root.windowScopeText + " (overdue within " + root.windowBackHours + "h ~ upcoming in " + root.windowFwdHours + "h)"
+                )
+                color: root.dim
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
               }
             }
           }
