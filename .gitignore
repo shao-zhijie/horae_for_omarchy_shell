@@ -17,3 +17,7 @@ node_modules/
 # Social / chat poster generation artifacts (not part of the shell plugin)
 *poster.html
 *showcase_vertical*.png
+
+# Agent skills cache
+.agents/
+skills-lock.json

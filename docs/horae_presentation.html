@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Horae for Omarchy — 项目介绍画册</title>
+  <style>
+    @page {
+      size: 1920px 1080px;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    :root {
+      --bg: #07080c;
+      --surface: #0f1118;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(255, 255, 255, 0.16);
+      --accent: #89b4fa;
+      --accent-coral: #f38ba8;
+      --accent-green: #a6e3a1;
+      --fg-head: #ffffff;
+      --fg-body: #94a3b8;
+      --fg-dim: #64748b;
+      --font-display: 'Plus Jakarta Sans', 'Noto Sans CJK SC', -apple-system, sans-serif;
+      --font-body: 'Noto Sans CJK SC', -apple-system, sans-serif;
+      --font-mono: 'Maple Mono NF CN', 'JetBrains Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg-body);
+      font-family: var(--font-body);
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .slide {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      page-break-inside: avoid;
+      background: var(--bg);
+      padding: 64px 88px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* Ambient background grid */
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .ambient-glow {
+      position: absolute;
+      top: -180px;
+      right: -180px;
+      width: 700px;
+      height: 700px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(137, 180, 250, 0.07) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    /* Header & Footer */
+    .slide-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 10;
+    }
+    .header-tag {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: var(--fg-dim);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-tag .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .header-number {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--fg-dim);
+      letter-spacing: 0.1em;
+    }
+
+    .slide-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 10;
+      font-size: 13px;
+      color: var(--fg-dim);
+      font-family: var(--font-mono);
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding-top: 16px;
+    }
+
+    /* Layout structure: Left Copy (500px), Right Big Visual (1fr) */
+    .slide-main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 500px 1fr;
+      gap: 64px;
+      align-items: center;
+      position: relative;
+      z-index: 10;
+      margin: 16px 0;
+    }
+
+    /* Left Copy Column */
+    .copy-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .copy-category {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+    .copy-title {
+      font-family: var(--font-display);
+      font-size: 44px;
+      font-weight: 800;
+      color: var(--fg-head);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      margin-bottom: 22px;
+    }
+    .copy-desc {
+      font-size: 18px;
+      line-height: 1.75;
+      color: var(--fg-body);
+      margin-bottom: 34px;
+    }
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .pill {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--fg-head);
+    }
+    .pill.coral {
+      border-color: rgba(243, 139, 168, 0.3);
+      color: #f38ba8;
+      background: rgba(243, 139, 168, 0.08);
+    }
+    .pill.green {
+      border-color: rgba(166, 227, 161, 0.3);
+      color: #a6e3a1;
+      background: rgba(166, 227, 161, 0.08);
+    }
+
+    /* Right Visual Frame */
+    .visual-col {
+      height: 720px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .window-card {
+      width: 100%;
+      height: 100%;
+      background: #0d0f16;
+      border: 1px solid var(--border-focus);
+      border-radius: 16px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .window-bar {
+      height: 40px;
+      background: #131620;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 8px;
+    }
+    .window-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .dot-ctrl {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .window-title {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-dim);
+      margin-left: 12px;
+    }
+    .window-body {
+      flex: 1;
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #090a10;
+      overflow: hidden;
+    }
+    .window-body img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Cover slide specific (Clean typography & spec sheet) */
+    .cover-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 80px;
+      align-items: center;
+      z-index: 10;
+      margin: 20px 0;
+    }
+    .cover-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .cover-badge {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .cover-h1 {
+      font-family: var(--font-display);
+      font-size: 76px;
+      font-weight: 800;
+      color: #fff;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      margin-bottom: 24px;
+    }
+    .cover-p {
+      font-size: 22px;
+      line-height: 1.65;
+      color: var(--fg-body);
+      margin-bottom: 40px;
+    }
+    .cover-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px 36px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 32px;
+    }
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .spec-value {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--fg-head);
+    }
+    .spec-label {
+      font-size: 13px;
+      color: var(--fg-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .cover-right-card {
+      background: #0d0f16;
+      border: 1px solid var(--border-focus);
+      border-radius: 20px;
+      padding: 42px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .cover-card-header {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .feature-item {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 20px;
+    }
+    .feature-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .feature-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--fg-head);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .feature-desc {
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--fg-body);
+    }
+
+    /* Bento rows */
+    .bento-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 36px;
+      width: 100%;
+    }
+    .bento-card {
+      background: #0d0f16;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+    .code-snip {
+      background: #06070a;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 18px 20px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: #93c5fd;
+      line-height: 1.65;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== 01 / COVER ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> OMARCHY COMMUNITY SHOWCASE</div>
+      <div class="header-number">01 / 09</div>
+    </div>
+
+    <div class="cover-grid">
+      <div class="cover-left">
+        <div class="cover-badge">⚡ NATIVE GTD & POMODORO SUITE</div>
+        <h1 class="cover-h1">Horae for Omarchy</h1>
+        <p class="cover-p">
+          专为 Omarchy 极客打造的原生任务流与番茄钟专注套件。<br>
+          2ms 极速冷启，无感状态栏共生，告别笨重 Electron 与打断心流的上下文切换。
+        </p>
+
+        <div class="cover-metrics">
+          <div class="spec-item">
+            <div class="spec-value">~2 ms</div>
+            <div class="spec-label">Rust 二进制启动耗时</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-value">0 %</div>
+            <div class="spec-label">inotify 监听待机开销</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-value">&lt; 10 s</div>
+            <div class="spec-label">脑中灵感到落地收件箱</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-value">100 %</div>
+            <div class="spec-label">纯本地单文件 SQLite</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cover-right-card">
+        <div class="cover-card-header">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent);"></span>
+          系统核心特性概览
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-title">🦀 Rust 高性能核心引擎</div>
+          <div class="feature-desc">单一原生二进制，内置 SQLite 不可变时间线审计、RRULE 循环引擎与 Ratatui 全键盘终端交互。</div>
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-title">🖥️ Quattro 状态栏原生共生</div>
+          <div class="feature-desc">微型番茄进度环、秒级倒计时内嵌融入状态栏，展开紧凑交互气泡，零冗余占用顶栏空间。</div>
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-title">🔒 独创投屏防窥隐私模式</div>
+          <div class="feature-desc">会议演示或公共办公时，一键隐去任务标题，仅保留时间图标，悬停自动弹出完整明文提示。</div>
+        </div>
+
+        <div class="feature-item">
+          <div class="feature-title">🔋 零轮询低能耗架构</div>
+          <div class="feature-desc">基于 Linux inotify 监听本地数据库，无后台定时脚本拉取，笔记本电池续航零负担。</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>HORAE × OMARCHY QUATTRO SHELL</div>
+      <div>https://github.com/zhaohang1205/horae</div>
+    </div>
+  </div>
+
+  <!-- ==================== 02 / POPUP DASHBOARD ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 03. POPUP DASHBOARD</div>
+      <div class="header-number">02 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">01 · 状态栏交互</div>
+        <h2 class="copy-title">原生融合<br>零冗余空间占用</h2>
+        <p class="copy-desc">
+          直接嵌入 Omarchy Quattro 顶栏。即将到期的日程以彩色徽章清晰呈现。<br><br>
+          点击状态栏即刻唤出紧凑气泡，一键开启番茄专注、标为完成或顺延 1 小时，无需离开当前工作区。
+        </p>
+        <div class="pill-group">
+          <span class="pill">即将到期任务流</span>
+          <span class="pill">一键开启专注</span>
+          <span class="pill">悬停平滑跑马灯</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">Quattro Bar · 交互弹窗与任务卡片 (3_pop_up.png)</div>
+          </div>
+          <div class="window-body">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/3_pop_up.png" alt="Popup Dashboard" style="max-height: 94%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>PIXEL-PERFECT QUATTRO WIDGET</div>
+      <div>BarWidget.qml</div>
+    </div>
+  </div>
+
+  <!-- ==================== 03 / POMODORO FOCUS ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 04. POMODORO FOCUS</div>
+      <div class="header-number">03 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">02 · 专注呼吸仪表</div>
+        <h2 class="copy-title">心流律动<br>一体化动态进度环</h2>
+        <p class="copy-desc">
+          会话开启后，正在专注的任务自动置顶，微型进度环与大字倒计时直接融合进任务项中。<br><br>
+          工作阶段红色脉冲，休息阶段绿色呼吸；圆点指示长休轮次，双击快捷停止，右击直达 TUI。
+        </p>
+        <div class="pill-group">
+          <span class="pill coral">动态进度圆环</span>
+          <span class="pill">秒级本地推算</span>
+          <span class="pill green">工作脉冲 / 休息呼吸</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">Status Bar · 番茄钟专注中视觉呈现 (4_pomodoro_mode.png)</div>
+          </div>
+          <div class="window-body" style="padding: 40px;">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/4_pomodoro_mode.png" alt="Pomodoro Mode" style="transform: scale(1.45); transform-origin: center; max-width: 80%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>ZERO EXTRA BAR SPACE</div>
+      <div>PomoRing & Countdown</div>
+    </div>
+  </div>
+
+  <!-- ==================== 04 / PRIVACY SHIELD ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 02. PRIVACY MODE TOGGLE</div>
+      <div class="header-number">04 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">03 · 独创功能</div>
+        <h2 class="copy-title">投屏防窥<br>状态栏一键隐身</h2>
+        <p class="copy-desc">
+          针对会议投屏、代码演示与公共办公场景设计。鼠标悬停状态栏左侧，一键切换隐私隐身状态。<br><br>
+          状态栏自动隐去敏感标题，仅保留时间图标（⏰ 15:30 / 🍅 24:50）。本人鼠标移入即通过原生浮窗提示详情。
+        </p>
+        <div class="pill-group">
+          <span class="pill">一键隐身切换</span>
+          <span class="pill">仅时间可见</span>
+          <span class="pill">悬停 Tooltip 查阅</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">Status Bar · 状态栏与隐私模式开关 (2_privacy_mode_off.png)</div>
+          </div>
+          <div class="window-body" style="padding: 40px;">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/2_privacy_mode_off.png" alt="Privacy Mode Off" style="transform: scale(1.35); transform-origin: center; max-width: 85%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>DISCREET & CONFIDENTIAL</div>
+      <div>Privacy Shield Mode</div>
+    </div>
+  </div>
+
+  <!-- ==================== 05 / FLASH CAPTURE ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 05. FLASH CAPTURE</div>
+      <div class="header-number">05 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">04 · 闪念录入</div>
+        <h2 class="copy-title">亚秒唤出<br>一句话极速收件</h2>
+        <p class="copy-desc">
+          快捷键一按，<code>horae -f</code> 唤出浮动输入终端，跳过全部加载动画，光标就绪。<br><br>
+          输入 <code>@</code> <code>~</code> <code>*</code> <code>!</code> 自动秒显候选；支持中文全角标点自动归一化，回车秒存秒退。
+        </p>
+        <div class="pill-group">
+          <span class="pill coral">无需按 Tab 弹出候选</span>
+          <span class="pill">全角标点归一化</span>
+          <span class="pill">&lt; 10s 灵感到库</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">horae --flash · 动态卡槽与标签智能补全 (5.2_quick_capture.png)</div>
+          </div>
+          <div class="window-body">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/5.2_quick_capture.png" alt="Quick Capture" style="max-height: 94%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>ZERO CONTEXT SWITCHING</div>
+      <div>horae -f / flash capture</div>
+    </div>
+  </div>
+
+  <!-- ==================== 06 / TERMINAL TUI ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 06. TERMINAL MASTERY</div>
+      <div class="header-number">06 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">05 · 终端大本营</div>
+        <h2 class="copy-title">Ratatui 终端<br>Vim 全键盘审计</h2>
+        <p class="copy-desc">
+          键盘驱动的完整 GTD 终端大本营。<code>j</code>/<code>k</code> 上下移动，<code>a</code> 录入，<code>d</code> 标记完成。<br><br>
+          按 <code>u</code> 零成本撤销误触操作。所有流转均记录 UTC 毫秒时间戳，完整回放任务全生命周期。
+        </p>
+        <div class="pill-group">
+          <span class="pill">Vim 键位沉浸操控</span>
+          <span class="pill green">u 键瞬间撤销</span>
+          <span class="pill">不可变时间账</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">horae TUI · 多列看板与任务时间账回放 (6_tui_app.png)</div>
+          </div>
+          <div class="window-body">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/6_tui_app.png" alt="TUI Dashboard" style="max-height: 94%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>KEYBOARD-DRIVEN TUI</div>
+      <div>Ratatui + SQLite Timeline</div>
+    </div>
+  </div>
+
+  <!-- ==================== 07 / TUI APP CONFIG ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 07. TUI CONFIGURATION</div>
+      <div class="header-number">07 / 09</div>
+    </div>
+
+    <div class="slide-main">
+      <div class="copy-col">
+        <div class="copy-category">06 · 集中配置管理</div>
+        <h2 class="copy-title">集中配置<br>规则偏好无缝联动</h2>
+        <p class="copy-desc">
+          按下 <code>F7</code> 即可唤起集中偏好面板。自由定制番茄钟周期、补全提示风格、极速幽灵文本模式与防打扰纯净录入。<br><br>
+          配置修改实时保存并与状态栏组件双向无缝同步，无需重启，即改即生效。
+        </p>
+        <div class="pill-group">
+          <span class="pill">F7 集中偏好面板</span>
+          <span class="pill coral">极速幽灵文本</span>
+          <span class="pill green">双向配置同步</span>
+        </div>
+      </div>
+
+      <div class="visual-col">
+        <div class="window-card">
+          <div class="window-bar">
+            <div class="window-dots"><div class="dot-ctrl"></div><div class="dot-ctrl"></div><div class="dot-ctrl"></div></div>
+            <div class="window-title">horae TUI · 模块与偏好配置界面 (7_tui_app_config.png)</div>
+          </div>
+          <div class="window-body">
+            <img src="file:///home/alex/Projects/horae_for_omarchy_shell/docs/screenshots/7_tui_app_config.png" alt="TUI Configuration" style="max-height: 94%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>SEAMLESS DUAL-WAY SYNC</div>
+      <div>F7 Configuration Panel</div>
+    </div>
+  </div>
+
+  <!-- ==================== 08 / UNDER THE HOOD ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 08. UNDER THE HOOD</div>
+      <div class="header-number">08 / 09</div>
+    </div>
+
+    <div class="slide-main" style="grid-template-columns: 1fr; margin: auto 0;">
+      <div class="bento-row">
+        <div class="bento-card">
+          <div>
+            <div class="copy-category">EXTREME OPTIMIZATION</div>
+            <h3 style="font-size: 32px; color: #fff; margin-bottom: 16px; font-weight: 800;">Rust 核心：~2ms 冷启动</h3>
+            <p style="font-size: 16px; line-height: 1.8; color: var(--fg-body);">
+              • <strong>免外部进程调用</strong>：直接扫描系统字体目录探测字形，绝不拉起 <code>fc-list</code>。<br>
+              • <strong>单批次 SQL 查询</strong>：系统设置一次性读取，无冗余 I/O 损耗。<br>
+              • <strong>异步输入法调度</strong>：输入法环境切换移至后台，光标即开即闪无卡顿。
+            </p>
+          </div>
+          <div class="code-snip">
+            $ horae capture "买牛奶 @home ~今天 18:00 !medium"<br>
+            <span style="color: #a6e3a1;">✓ 已记录 (#a3f)</span> <span style="color: #64748b;">[~2ms 瞬时退出]</span>
+          </div>
+        </div>
+
+        <div class="bento-card">
+          <div>
+            <div class="copy-category" style="color: var(--accent-green);">BATTERY FRIENDLY</div>
+            <h3 style="font-size: 32px; color: #fff; margin-bottom: 16px; font-weight: 800;">Quattro 组件：零轮询事件驱动</h3>
+            <p style="font-size: 16px; line-height: 1.8; color: var(--fg-body);">
+              • <strong>inotify 机制感知</strong>：监听 <code>horae.db</code> 与 <code>pomo.json</code>，变动即刻响应。<br>
+              • <strong>0% 待机 CPU 消耗</strong>：告别某些状态栏插件每秒死循环调脚本拉取的耗电恶疾。<br>
+              • <strong>D-Bus 原生通知</strong>：直连桌面通知系统，杜绝命令行参数泄露敏感标题。
+            </p>
+          </div>
+          <div class="code-snip">
+            // QML 监听变更，本地数学推算秒级倒计时，电池零负担<br>
+            <span style="color: var(--accent);">FileWatcher</span> on <span style="color: #f9e2af;">~/.config/horae/pomo.json</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>SYSTEM CRAFTSMANSHIP</div>
+      <div>Zero-Polling & Low Power</div>
+    </div>
+  </div>
+
+  <!-- ==================== 09 / GET STARTED ==================== -->
+  <div class="slide">
+    <div class="bg-grid"></div>
+    <div class="ambient-glow"></div>
+
+    <div class="slide-header">
+      <div class="header-tag"><span class="dot"></span> 09. GET STARTED IN OMARCHY</div>
+      <div class="header-number">09 / 09</div>
+    </div>
+
+    <div class="slide-main" style="grid-template-columns: 1fr; margin: auto 0;">
+      <div style="margin-bottom: 24px;">
+        <div class="copy-category">QUICKSTART</div>
+        <h2 class="copy-title" style="margin-bottom: 8px;">不到 1 分钟，装进你的 Omarchy</h2>
+        <p class="copy-desc" style="margin-bottom: 0;">一键安装，快捷键就位，即刻享受行云流水的纯粹 GTD 体验。</p>
+      </div>
+
+      <div class="bento-row">
+        <div class="bento-card" style="padding: 30px;">
+          <div>
+            <div style="font-family: var(--font-mono); font-size: 13px; color: var(--accent); margin-bottom: 8px;">STEP 1 · 核心引擎 (AUR / Cargo)</div>
+            <div class="code-snip" style="margin-top: 6px;">
+              <span style="color: #64748b;"># AUR 预编译包 (推荐)</span><br>
+              yay -S aur-horae-bin<br><br>
+              <span style="color: #64748b;"># 或 Cargo 安装</span><br>
+              cargo install horae
+            </div>
+          </div>
+          <div style="margin-top: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 13px; color: var(--accent-coral); margin-bottom: 8px;">STEP 2 · Omarchy 状态栏插件</div>
+            <div class="code-snip" style="margin-top: 6px;">
+              git clone https://github.com/zhaohang1205/horae_for_omarchy_shell.git<br>
+              cd horae_for_omarchy_shell && ./install.sh
+            </div>
+          </div>
+        </div>
+
+        <div class="bento-card" style="padding: 30px;">
+          <div>
+            <div style="font-family: var(--font-mono); font-size: 13px; color: var(--accent-green); margin-bottom: 8px;">STEP 3 · Hyprland 快捷键 (~/.config/hypr/hyprland.conf)</div>
+            <div class="code-snip" style="margin-top: 6px;">
+              <span style="color: #64748b;"># Super + T: 一秒闪念快速录入</span><br>
+              bind = $mainMod, T, exec, horae -f<br><br>
+              <span style="color: #64748b;"># Super + Shift + T: 呼出/聚焦 TUI 大本营</span><br>
+              bind = $mainMod SHIFT, T, exec, omarchy-launch-or-focus-tui horae
+            </div>
+          </div>
+          <div style="margin-top: 20px; font-size: 14px; color: var(--fg-body); line-height: 1.7;">
+            💬 <strong>交流与共建</strong>：欢迎在 Omarchy 微信群分享体验与按键习惯！<br>
+            ⭐ <strong>项目主页</strong>：<code>github.com/zhaohang1205/horae</code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-footer">
+      <div>HAPPY HACKING & DEEP FOCUS 🍅</div>
+      <div>Designed for Omarchy Community</div>
+    </div>
+  </div>
+
+</body>
+</html>
