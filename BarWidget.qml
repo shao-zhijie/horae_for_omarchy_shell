@@ -323,7 +323,7 @@ BarWidget {
       var phase = phaseLabel() + " · " + formatCountdown(pomoRemainingSecs)
       var title = String(pomoTaskTitle || "").trim()
       if (title !== "") {
-        var cleanTitle = safePlainText(privacyMode ? maskTitle(title) : title)
+        var cleanTitle = safePlainText(title)
         return (pomoBreaking ? "󰛄 " : "󰔛 ") + phase + "\n" + cleanTitle
       }
       return (pomoBreaking ? "󰛄 " : "󰔛 ") + phase
@@ -333,7 +333,7 @@ BarWidget {
 
   function taskTooltipText(task, isWorking) {
     if (!task) return ""
-    var rawTitle = privacyMode ? maskTitle(task.title) : String(task.title || i18n("(未命名任务)", "(untitled)"))
+    var rawTitle = String(task.title || i18n("(未命名任务)", "(untitled)"))
     var title = safePlainText(rawTitle)
 
     if (isWorking) {
