@@ -2112,19 +2112,24 @@ BarWidget {
                   readonly property bool isRowSelected: root.selectedTaskId !== "" && String(taskData.id) === root.selectedTaskId
                   readonly property bool isRowWorking: root.workingTaskId !== "" && String(taskData.id) === root.workingTaskId
                   readonly property color rowStatusCol: root.statusColor(taskData)
+                  readonly property bool isRowHovered: rowHover.hovered
                   width: tasksListColumn.width
                   height: Style.space(34)
+
+                  HoverHandler {
+                    id: rowHover
+                  }
 
                   Rectangle {
                     anchors.fill: parent
                     radius: Style.cornerRadius > 0 ? Style.cornerRadius : 6
                     color: taskRow.isRowSelected
                       ? Util.alpha(root.accent, 0.13)
-                      : (rowMouse.containsMouse ? Style.hoverFillFor(root.fg, root.accent) : Util.alpha(root.fg, 0.02))
+                      : (taskRow.isRowHovered ? Style.hoverFillFor(root.fg, root.accent) : Util.alpha(root.fg, 0.02))
                     border.width: 1
                     border.color: taskRow.isRowSelected
                       ? Util.alpha(root.accent, 0.42)
-                      : (rowMouse.containsMouse ? Util.alpha(root.accent, 0.25) : "transparent")
+                      : (taskRow.isRowHovered ? Util.alpha(root.accent, 0.25) : "transparent")
                     Behavior on color {
                       ColorAnimation { duration: Style.duration(120) }
                     }
@@ -2148,7 +2153,6 @@ BarWidget {
                   MouseArea {
                     id: rowMouse
                     anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                       root.selectedTaskId = String(taskRow.taskData.id)
@@ -2195,14 +2199,16 @@ BarWidget {
 
                     Item {
                       id: rowRightCluster
-                      width: rowMouse.containsMouse ? rowQuickActions.implicitWidth : taskRowTimePill.implicitWidth
+                      readonly property real actionsWidth: rowQuickActions.implicitWidth
+                      readonly property real timeWidth: taskRowTimePill.implicitWidth
+                      width: taskRow.isRowHovered ? Math.max(actionsWidth, timeWidth) : (root.taskTime(taskRow.taskData) > 0 ? timeWidth : 0)
                       height: parent.height
                       anchors.verticalCenter: parent.verticalCenter
 
                       // Due time & relative time pill (default state)
                       Rectangle {
                         id: taskRowTimePill
-                        visible: !rowMouse.containsMouse
+                        visible: !taskRow.isRowHovered && root.taskTime(taskRow.taskData) > 0
                         implicitWidth: taskRowTime.implicitWidth + Style.space(10)
                         implicitHeight: Style.space(18)
                         radius: height / 2
@@ -2224,7 +2230,7 @@ BarWidget {
                       // Hover inline quick-actions: Start Focus + Complete
                       Row {
                         id: rowQuickActions
-                        visible: rowMouse.containsMouse
+                        visible: taskRow.isRowHovered
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Style.space(4)
