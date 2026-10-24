@@ -422,20 +422,6 @@ BarWidget {
     return findSelectedTask(displayTasks, selectedTaskId)
   }
 
-  function moveTaskSelection(delta) {
-    if (!windowTasks || windowTasks.length === 0) return
-    var idx = -1
-    for (var i = 0; i < windowTasks.length; i++) {
-      if (String(windowTasks[i].id) === selectedTaskId) {
-        idx = i
-        break
-      }
-    }
-    var nextIdx = idx < 0 ? (delta > 0 ? 0 : windowTasks.length - 1)
-                          : Math.max(0, Math.min(windowTasks.length - 1, idx + delta))
-    selectedTaskId = String(windowTasks[nextIdx].id)
-  }
-
   function advanceSelectionAfterAction(actedId) {
     if (!windowTasks || windowTasks.length <= 1) {
       selectedTaskId = ""
@@ -1203,70 +1189,26 @@ BarWidget {
     owner: root
     open: root.popupOpen
     contentWidth: popup.fittedContentWidth(Style.space(420))
-    contentHeight: popup.fittedContentHeight(popupKeyScope.implicitHeight)
+    contentHeight: popup.fittedContentHeight(popupContent.implicitHeight)
 
-    PanelKeyCatcher {
-      id: popupKeyScope
-      width: parent.width
-      implicitHeight: popupContent.implicitHeight
+    Column {
+      id: popupContent
+      anchors.fill: parent
+      spacing: Style.space(12)
+      focus: true
 
-      onCloseRequested: {
+      Keys.onEscapePressed: function(event) {
         if (root.showPomoSettings) {
           root.showPomoSettings = false
+          event.accepted = true
         } else if (root.selectedTaskId !== "") {
           root.selectedTaskId = ""
+          event.accepted = true
         } else {
           root.close()
+          event.accepted = true
         }
       }
-
-      onMoveRequested: function(dx, dy) {
-        if (root.showPomoSettings) return
-        if (dy !== 0) {
-          root.moveTaskSelection(dy)
-        } else if (dx !== 0 && root.selectedTask !== null) {
-          root.deferSelected()
-        }
-      }
-
-      onActivateRequested: {
-        if (root.showPomoSettings) return
-        if (root.pomoRunning) root.stopPomo()
-        else root.startSelected()
-      }
-
-      onDeleteRequested: {
-        if (root.showPomoSettings) return
-        if (root.selectedTask !== null) {
-          root.archiveSelected()
-        }
-      }
-
-      onTextKey: function(t, modifiers) {
-        if (root.showPomoSettings) return
-        var k = t.toLowerCase()
-        if (k === "s") {
-          if (root.pomoRunning) root.stopPomo()
-          else root.startSelected()
-        } else if (k === "d") {
-          if (root.selectedTask !== null) root.completeSelected()
-        } else if (k === "+" || k === "=" || k === "l") {
-          if (root.selectedTask !== null) root.deferSelected()
-        } else if (k === "c") {
-          root.launchFlashCapture()
-        } else if (k === "t") {
-          root.openTui()
-        } else if (k === "p") {
-          root.togglePrivacyMode()
-        } else if (k === ",") {
-          root.showPomoSettings = true
-        }
-      }
-
-      Column {
-        id: popupContent
-        width: parent.width
-        spacing: Style.space(10)
 
         // --- Top Header Bar ---
         Item {
@@ -1355,8 +1297,8 @@ BarWidget {
               foreground: root.privacyMode ? root.accent : root.textColor
               background: root.privacyMode ? Util.alpha(root.accent, 0.14) : Util.alpha(root.fg, 0.06)
               tooltipText: root.privacyMode
-                ? root.i18n("隐私模式：已开启 (P)", "Privacy Mode: On (P)")
-                : root.i18n("隐私模式：已关闭 (P)", "Privacy Mode: Off (P)")
+                ? root.i18n("隐私模式：已开启", "Privacy Mode: On")
+                : root.i18n("隐私模式：已关闭", "Privacy Mode: Off")
               onClicked: root.togglePrivacyMode()
             }
 
@@ -1370,7 +1312,7 @@ BarWidget {
               iconSize: Style.font.bodySmall
               foreground: root.textColor
               background: Util.alpha(root.fg, 0.06)
-              tooltipText: root.i18n("番茄钟设置 (,)", "Settings (,)")
+              tooltipText: root.i18n("番茄钟偏好设置", "Pomodoro Settings")
               onClicked: root.showPomoSettings = true
             }
           }
@@ -1390,7 +1332,7 @@ BarWidget {
 
             PanelActionButton {
               iconText: "󰅁"
-              tooltipText: root.i18n("返回 (Esc)", "Back (Esc)")
+              tooltipText: root.i18n("返回", "Back")
               foreground: root.fg
               anchors.verticalCenter: parent.verticalCenter
               onClicked: root.showPomoSettings = false
@@ -1691,10 +1633,10 @@ BarWidget {
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
                 tooltipText: root.pomoRunning
-                  ? root.i18n("停止当前专注 (Enter / S)", "Stop focus session (Enter / S)")
+                  ? root.i18n("停止当前专注", "Stop focus session")
                   : (root.selectedTask
-                     ? root.i18n("专注选中任务 (Enter / S)", "Focus on selected task (Enter / S)")
-                     : root.i18n("开始专注 (Enter / S)", "Start focus session (Enter / S)"))
+                     ? root.i18n("专注选中任务", "Focus on selected task")
+                     : root.i18n("开始专注", "Start focus session"))
                 enabled: root.pomoRunning || root.selectedTask !== null || root.windowTasks.length > 0
                 onClicked: {
                   if (root.pomoRunning) root.stopPomo()
@@ -1712,7 +1654,7 @@ BarWidget {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
-                tooltipText: root.i18n("启动闪念录入窗口 (C)", "Launch Quick Capture (C)")
+                tooltipText: root.i18n("启动闪念录入窗口", "Launch Quick Capture")
                 onClicked: root.launchFlashCapture()
               }
 
@@ -1725,7 +1667,7 @@ BarWidget {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
-                tooltipText: root.i18n("打开 Horae 终端界面 (T)", "Open Horae TUI (T)")
+                tooltipText: root.i18n("打开 Horae 终端界面", "Open Horae TUI")
                 onClicked: root.openTui()
               }
             }
@@ -1963,7 +1905,7 @@ BarWidget {
                 iconSize: Style.font.caption
                 foreground: root.dim
                 background: "transparent"
-                tooltipText: root.i18n("取消选中 (Esc)", "Clear selection (Esc)")
+                tooltipText: root.i18n("取消选中", "Clear selection")
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: root.selectedTaskId = ""
               }
@@ -2024,7 +1966,7 @@ BarWidget {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
-                tooltipText: root.i18n("完成当前任务 (D)", "Complete selected task (D)")
+                tooltipText: root.i18n("标记完成", "Mark Done")
                 onClicked: root.completeSelected()
               }
 
@@ -2037,7 +1979,7 @@ BarWidget {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
-                tooltipText: root.i18n("推迟 1 小时 (H / +)", "Defer by 1 hour (H / +)")
+                tooltipText: root.i18n("延迟 1 小时", "+1 Hour")
                 onClicked: root.deferSelected()
               }
 
@@ -2050,7 +1992,7 @@ BarWidget {
                 fontFamily: root.fontFamily
                 fontSize: Style.font.bodySmall
                 horizontalPadding: Style.space(4)
-                tooltipText: root.i18n("归档移除此任务 (X / Del)", "Archive task (X / Del)")
+                tooltipText: root.i18n("归档此任务", "Archive task")
                 onClicked: root.archiveSelected()
               }
             }
@@ -2322,25 +2264,7 @@ BarWidget {
             }
           }
         }
-
-        // --- Keyboard Shortcut Hint Footer ---
-        Item {
-          width: parent.width
-          height: Style.space(16)
-          visible: !root.showPomoSettings
-
-          PlainText {
-            anchors.centerIn: parent
-            text: root.i18n(
-              "↑↓/JK 切换 · Enter 专注 · D 完成 · H +1h · C 闪念 · T 终端",
-              "↑↓/JK Select · Enter Focus · D Done · H +1h · C Capture · T TUI"
-            )
-            color: Util.alpha(root.dim, 0.75)
-            font.pixelSize: Style.font.caption
-          }
-        }
       }
-    }
   }
 
   property bool tasksRefreshPending: false
