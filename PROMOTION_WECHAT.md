@@ -106,7 +106,7 @@
 
 ### 步骤一：安装 Horae Rust 核心引擎
 ```bash
-cargo install --git https://github.com/zhaohang1205/horae.git --tag v0.2.5
+cargo install --git https://github.com/zhaohang1205/horae.git --rev 805dd02f72654d36d6a21d5f2a5a94b475665d8b
 ```
 
 ### 步骤二：推荐在 Shell 配置中加入 Alias（`~/.bashrc` 或 `~/.zshrc`）
