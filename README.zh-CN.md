@@ -42,7 +42,17 @@
 
 ## 安装与配置
 
-### 方法 1：一键自动化安装（推荐）
+### 方法 1：使用 Omarchy 官方插件命令安装（推荐）
+
+通过 Omarchy 官方原生插件命令一键安装并启用：
+
+```bash
+omarchy plugin add https://github.com/zhaohang1205/horae_for_omarchy_shell.git --enable
+```
+
+> **开箱即用向导**：插件已内嵌首发引导向导。若系统尚未安装 `horae` CLI 核心工具，状态栏卡片将友好呈现初始化入口，支持在弹窗中一键调用终端自动完成安装或手动复制命令。
+
+### 方法 2：一键本地安装脚本
 
 直接克隆或在本地仓库运行自带的安装脚本，将自动完成插件链接、居中启用以及推荐参数（`maxWidth: 420`, `autoDismiss: 15`）注入：
 
@@ -50,12 +60,6 @@
 git clone https://github.com/zhaohang1205/horae_for_omarchy_shell.git
 cd horae_for_omarchy_shell
 ./install.sh
-```
-
-### 方法 2：使用 Omarchy CLI 安装
-
-```bash
-omarchy plugin add https://github.com/zhaohang1205/horae_for_omarchy_shell.git --enable
 ```
 
 > **提示**：插件代码内已默认开启 15 秒自动消失（`autoDismiss: 15`），安装即生效。若需要将参数显式写入 `~/.config/omarchy/shell.json`，可执行：

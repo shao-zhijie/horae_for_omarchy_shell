@@ -9,7 +9,7 @@ LEGACY_DIR="$HOME/.config/omarchy/plugins/horae_for_omarchy_shell"
 echo "==> Installing Horae for Omarchy Shell..."
 
 # Check if horae is installed
-if ! command -v horae >/dev/null 2>&1 && [[ ! -f "$HOME/.cargo/bin/horae" ]]; then
+if ! command -v horae >/dev/null 2>&1 && [[ ! -f "$HOME/.cargo/bin/horae" && ! -f "$HOME/.local/bin/horae" ]]; then
   echo "⚠️  Horae CLI not found. Please install it first:"
   echo "    cargo install --git https://github.com/zhaohang1205/horae.git --tag v0.2.5"
 fi

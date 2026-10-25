@@ -15,11 +15,19 @@ BarWidget {
   readonly property string dataDir: setting("dataDir", defaultDataDir)
 
   readonly property string cargoHoraeBin: homeDir !== "" ? (homeDir + "/.cargo/bin/horae") : ""
+  readonly property string localHoraeBin: homeDir !== "" ? (homeDir + "/.local/bin/horae") : ""
+  property string resolvedHoraeBin: ""
   readonly property string horaeBin: {
     var custom = String(setting("horaeBin", "")).trim()
     if (custom !== "") return custom
-    return cargoHoraeBin !== "" ? cargoHoraeBin : "horae"
+    if (resolvedHoraeBin !== "") return resolvedHoraeBin
+    return cargoHoraeBin !== "" ? cargoHoraeBin : (localHoraeBin !== "" ? localHoraeBin : "horae")
   }
+
+  property bool horaeInstalled: false
+  property string horaeVersion: ""
+  property int probeIndex: 0
+  property bool commandCopied: false
 
   readonly property string profile: String(setting("profile", "")).trim()
   readonly property int alarmLimit: Math.max(1, Math.min(20, Number(setting("limit", 10))))
@@ -872,18 +880,70 @@ BarWidget {
       y: (capsuleContainer.height - height) / 2
       spacing: Style.space(4)
 
+      // Setup guide indicator on bar when Horae CLI is not yet installed
+      Item {
+        id: setupIndicatorItem
+        visible: !root.horaeInstalled
+        readonly property bool hovering: setupMouse.containsMouse
+        readonly property real targetWidth: setupRow.implicitWidth + Style.space(12)
+        implicitWidth: targetWidth
+        width: implicitWidth
+        implicitHeight: root.capsuleHeight
+        clip: true
+
+        Rectangle {
+          anchors.fill: parent
+          anchors.topMargin: Style.space(2)
+          anchors.bottomMargin: Style.space(2)
+          radius: height / 2
+          color: setupMouse.containsMouse ? Util.alpha(root.accent, 0.22) : Util.alpha(root.accent, 0.12)
+          Behavior on color { ColorAnimation { duration: Style.duration(150) } }
+        }
+
+        Row {
+          id: setupRow
+          anchors.centerIn: parent
+          spacing: Style.space(5)
+
+          PlainText {
+            text: "󰋼"
+            color: root.accent
+            font.pixelSize: Style.font.caption
+            anchors.verticalCenter: parent.verticalCenter
+          }
+
+          PlainText {
+            text: root.i18n("Horae (需初始化)", "Horae (Setup)")
+            color: root.textColor
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            anchors.verticalCenter: parent.verticalCenter
+          }
+        }
+
+        MouseArea {
+          id: setupMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.togglePopup()
+          onEntered: if (root.bar) root.bar.showTooltip(setupIndicatorItem, root.i18n("未检测到 Horae CLI 后端，点击打开设置向导", "Horae CLI not detected. Click to open setup wizard"))
+          onExited: if (root.bar) root.bar.hideTooltip(setupIndicatorItem)
+        }
+      }
+
       // Privacy Mode Toggle Button on Bar (revealed on hover)
       Item {
         id: privacyBtnItem
         readonly property bool hovering: privacyMouse.containsMouse
         readonly property bool tooltipHovered: visible && opacity > 0 && privacyMouse.containsMouse
         readonly property real targetWidth: privacyBtnText.implicitWidth + Style.space(12)
-        implicitWidth: root.revealPrivacyBtn ? targetWidth : 0
+        implicitWidth: (root.horaeInstalled && root.revealPrivacyBtn) ? targetWidth : 0
         width: implicitWidth
         implicitHeight: root.capsuleHeight
-        visible: width > 0.5
+        visible: root.horaeInstalled && width > 0.5
         clip: true
-        opacity: root.revealPrivacyBtn ? 1.0 : 0.0
+        opacity: (root.horaeInstalled && root.revealPrivacyBtn) ? 1.0 : 0.0
 
         Behavior on implicitWidth {
           NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
@@ -925,22 +985,22 @@ BarWidget {
 
       Repeater {
         id: barRepeater
-        model: root.displayTasks
+        model: root.horaeInstalled ? root.displayTasks : []
         delegate: taskDelegate
       }
 
       // 无待办任务时的保底番茄钟/灵感录入入口（有待办任务时番茄钟已深度集成进各任务项自身）
       Item {
         id: pomoItem
-        visible: root.displayTasks.length === 0 && width > 0.5
+        visible: root.horaeInstalled && root.displayTasks.length === 0 && width > 0.5
         readonly property bool hovering: pomoMouse.containsMouse
         readonly property bool tooltipHovered: visible && opacity > 0 && pomoMouse.containsMouse
         readonly property real targetWidth: pomoRow.implicitWidth + Style.space(12)
-        implicitWidth: (root.displayTasks.length === 0 && root.revealPomoItem) ? targetWidth : 0
+        implicitWidth: (root.horaeInstalled && root.displayTasks.length === 0 && root.revealPomoItem) ? targetWidth : 0
         width: implicitWidth
         implicitHeight: root.capsuleHeight
         clip: true
-        opacity: (root.displayTasks.length === 0 && root.revealPomoItem) ? 1.0 : 0.0
+        opacity: (root.horaeInstalled && root.displayTasks.length === 0 && root.revealPomoItem) ? 1.0 : 0.0
 
         Behavior on implicitWidth {
           NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
@@ -1216,11 +1276,249 @@ BarWidget {
         }
       }
 
+        // =====================================================================
+        // First-run Setup Wizard (Shown when Horae CLI is not yet installed)
+        // =====================================================================
+        Column {
+          id: setupWizardCol
+          width: parent.width
+          spacing: Style.space(12)
+          visible: !root.horaeInstalled
+
+          // Wizard Header Bar
+          Item {
+            width: parent.width
+            height: Style.space(26)
+
+            Row {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(7)
+
+              PlainText {
+                text: "󰋼"
+                color: root.accent
+                font.pixelSize: Style.font.title
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              PlainText {
+                text: root.i18n("Horae 后端初始化向导", "Horae Setup Wizard")
+                color: root.fg
+                font.pixelSize: Style.font.body
+                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            Row {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(4)
+
+              Button {
+                text: root.currentLang === "zh" ? "EN" : "中"
+                foreground: root.textColor
+                background: Util.alpha(root.fg, 0.06)
+                fontSize: Style.font.caption
+                horizontalPadding: Style.space(6)
+                tooltipText: root.i18n("切换语言 / Switch Language", "Switch Language / 切换语言")
+                onClicked: root.toggleLanguage()
+              }
+
+              Button {
+                iconText: "󰅖"
+                foreground: root.textColor
+                background: Util.alpha(root.fg, 0.06)
+                fontSize: Style.font.caption
+                horizontalPadding: Style.space(6)
+                tooltipText: root.i18n("关闭", "Close")
+                onClicked: root.close()
+              }
+            }
+          }
+
+          // Welcome & Intro Banner Card
+          Rectangle {
+            width: parent.width
+            implicitHeight: setupHeroCol.implicitHeight + Style.space(20)
+            radius: Style.cornerRadius > 0 ? Style.cornerRadius : 10
+            color: Util.alpha(root.accent, 0.08)
+            border.width: 1
+            border.color: Util.alpha(root.accent, 0.25)
+
+            Column {
+              id: setupHeroCol
+              anchors.fill: parent
+              anchors.margins: Style.space(12)
+              spacing: Style.space(8)
+
+              PlainText {
+                width: parent.width
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: root.i18n(
+                  "欢迎使用 Horae 任务与专注插件！本插件依托纯本地 Rust 核心服务管理 SQLite 任务队列与番茄钟节律，极速轻量且隐私安全。当前系统未检测到 horae 命令行工具，请选择以下任一方式完成安装：",
+                  "Welcome to Horae Tasks & Focus! This widget relies on a local Rust CLI to manage SQLite GTD tasks and Pomodoro focus sessions. The horae CLI was not detected. Please install it using one of the options below:"
+                )
+                color: root.dim
+                font.pixelSize: Style.font.caption
+                lineHeight: 1.35
+              }
+            }
+          }
+
+          // Option 1: Automatic Terminal Install Button
+          Rectangle {
+            width: parent.width
+            implicitHeight: opt1Col.implicitHeight + Style.space(18)
+            radius: Style.cornerRadius > 0 ? Style.cornerRadius : 8
+            color: Util.alpha(root.fg, 0.03)
+            border.width: 1
+            border.color: Util.alpha(root.fg, 0.08)
+
+            Column {
+              id: opt1Col
+              anchors.fill: parent
+              anchors.margins: Style.space(10)
+              spacing: Style.space(8)
+
+              PlainText {
+                text: root.i18n("途径一：在终端中一键自动安装（推荐）", "Option 1: One-click Terminal Install (Recommended)")
+                color: root.fg
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
+
+              Button {
+                width: parent.width
+                iconText: "󰞷"
+                text: root.i18n("打开终端自动执行安装", "Launch Terminal & Install")
+                foreground: root.accent
+                background: Util.alpha(root.accent, 0.12)
+                bordered: true
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                horizontalPadding: Style.space(8)
+                tooltipText: root.i18n("调用 Omarchy 默认终端执行 cargo install", "Open Omarchy terminal and run cargo install")
+                onClicked: {
+                  if (root.bar) {
+                    var script = "echo '==> Installing Horae CLI via Cargo...'; cargo install --git https://github.com/zhaohang1205/horae.git --tag v0.2.5 && echo -e '\\n✅ Horae installed successfully! Press Enter to close this window.' || (echo -e '\\n❌ Installation failed. Please check your Rust environment.'; read -n 1 -s -r -p 'Press any key to close...'); read dummy"
+                    var fullCmd = "omarchy-launch-tui bash -c " + shellArg(script)
+                    root.bar.run(fullCmd)
+                  }
+                }
+              }
+            }
+          }
+
+          // Option 2: Copy Cargo Command
+          Rectangle {
+            width: parent.width
+            implicitHeight: opt2Col.implicitHeight + Style.space(18)
+            radius: Style.cornerRadius > 0 ? Style.cornerRadius : 8
+            color: Util.alpha(root.fg, 0.03)
+            border.width: 1
+            border.color: Util.alpha(root.fg, 0.08)
+
+            Column {
+              id: opt2Col
+              anchors.fill: parent
+              anchors.margins: Style.space(10)
+              spacing: Style.space(8)
+
+              PlainText {
+                text: root.i18n("途径二：手动复制 Cargo 安装命令", "Option 2: Copy Cargo Command Manually")
+                color: root.fg
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
+
+              Rectangle {
+                width: parent.width
+                height: Style.space(34)
+                radius: 6
+                color: Util.alpha(root.bg, 0.6)
+                border.width: 1
+                border.color: Util.alpha(root.fg, 0.12)
+
+                Row {
+                  anchors.fill: parent
+                  anchors.leftMargin: Style.space(8)
+                  anchors.rightMargin: Style.space(4)
+                  spacing: Style.space(6)
+
+                  PlainText {
+                    width: parent.width - copyBtn.width - Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "cargo install --git https://github.com/zhaohang1205/horae.git --tag v0.2.5"
+                    color: root.dim
+                    font.pixelSize: Style.font.caption
+                    font.family: root.fontFamily
+                    elide: Text.ElideMiddle
+                  }
+
+                  Button {
+                    id: copyBtn
+                    iconText: root.commandCopied ? "󰄬" : "󰆏"
+                    text: root.commandCopied ? root.i18n("已复制", "Copied") : root.i18n("复制", "Copy")
+                    foreground: root.commandCopied ? root.urgent : root.fg
+                    background: Util.alpha(root.fg, 0.08)
+                    fontSize: Style.font.caption
+                    horizontalPadding: Style.space(6)
+                    onClicked: {
+                      Quickshell.execDetached(["wl-copy", "cargo install --git https://github.com/zhaohang1205/horae.git --tag v0.2.5"])
+                      root.commandCopied = true
+                      copyFeedbackTimer.restart()
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          // Bottom Action Row
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+
+            Button {
+              width: (parent.width - Style.space(8)) / 2
+              iconText: "󰑐"
+              text: root.i18n("重新检测后端", "Check Again")
+              foreground: root.fg
+              background: Util.alpha(root.fg, 0.08)
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              horizontalPadding: Style.space(6)
+              tooltipText: root.i18n("刷新并重新检测 horae CLI 是否就绪", "Probe again for horae CLI binary")
+              onClicked: root.startProbe()
+            }
+
+            Button {
+              width: (parent.width - Style.space(8)) / 2
+              iconText: "󰖟"
+              text: root.i18n("查看详细文档", "View Docs")
+              foreground: root.dim
+              background: Util.alpha(root.fg, 0.04)
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              horizontalPadding: Style.space(6)
+              tooltipText: root.i18n("在浏览器中打开 GitHub 仓库", "Open GitHub repository in browser")
+              onClicked: {
+                if (root.bar) {
+                  root.bar.run("xdg-open https://github.com/zhaohang1205/horae_for_omarchy_shell")
+                }
+              }
+            }
+          }
+        }
+
         // --- Top Header Bar ---
         Item {
           width: parent.width
           height: Style.space(26)
-          visible: !root.showPomoSettings
+          visible: root.horaeInstalled && !root.showPomoSettings
 
           Row {
             anchors.left: parent.left
@@ -1328,7 +1626,7 @@ BarWidget {
         Item {
           width: parent.width
           height: Style.space(26)
-          visible: root.showPomoSettings
+          visible: root.horaeInstalled && root.showPomoSettings
 
           Row {
             id: settingsTitleRow
@@ -1387,7 +1685,7 @@ BarWidget {
         // --- Pomodoro session instrument card (idle & running; hidden in settings) ---
         Rectangle {
           width: parent.width
-          visible: !root.showPomoSettings
+          visible: root.horaeInstalled && !root.showPomoSettings
           implicitHeight: heroCardCol.implicitHeight + Style.space(20)
           radius: Style.cornerRadius > 0 ? Style.cornerRadius : 8
           color: Util.alpha(root.fg, 0.04)
@@ -1684,7 +1982,7 @@ BarWidget {
         Column {
           width: parent.width
           spacing: Style.space(10)
-          visible: root.showPomoSettings
+          visible: root.horaeInstalled && root.showPomoSettings
 
           PlainText {
             text: root.i18n("快捷专注节律预设：", "Quick Focus Rhythm Presets:")
@@ -1851,7 +2149,7 @@ BarWidget {
         Rectangle {
           id: selectedTaskCard
           width: parent.width
-          visible: !root.showPomoSettings && root.selectedTask !== null
+          visible: root.horaeInstalled && !root.showPomoSettings && root.selectedTask !== null
           implicitHeight: selectedCol.implicitHeight + Style.space(18)
           radius: Style.cornerRadius > 0 ? Style.cornerRadius : 8
           readonly property bool isUrgentSelected: root.selectedTask !== null && root.isUrgent(root.selectedTask)
@@ -2009,7 +2307,7 @@ BarWidget {
         Column {
           width: parent.width
           spacing: Style.space(4)
-          visible: !root.showPomoSettings
+          visible: root.horaeInstalled && !root.showPomoSettings
 
           Item {
             width: parent.width
@@ -2352,10 +2650,71 @@ BarWidget {
       }
   }
 
+  Timer {
+    id: copyFeedbackTimer
+    interval: 2000
+    onTriggered: root.commandCopied = false
+  }
+
+  readonly property var candidateBins: [
+    String(setting("horaeBin", "")).trim(),
+    "horae",
+    cargoHoraeBin,
+    localHoraeBin,
+    "/usr/local/bin/horae",
+    "/usr/bin/horae"
+  ].filter(function(b) { return b && b !== "" })
+
+  function startProbe() {
+    probeIndex = 0
+    testNextCandidate()
+  }
+
+  function testNextCandidate() {
+    if (probeIndex >= candidateBins.length) {
+      root.horaeInstalled = false
+      root.horaeVersion = ""
+      return
+    }
+    var bin = candidateBins[probeIndex]
+    var cmd = [bin]
+    if (profile !== "") cmd.push("--profile", profile)
+    cmd.push("--version")
+    probeHoraeProc.command = cmd
+    probeHoraeProc.running = true
+  }
+
+  Process {
+    id: probeHoraeProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: function(text) {
+        var trimmed = text.trim()
+        if (trimmed.indexOf("horae") !== -1) {
+          root.horaeInstalled = true
+          root.horaeVersion = trimmed
+          root.resolvedHoraeBin = candidateBins[root.probeIndex]
+        }
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        root.horaeInstalled = true
+        root.resolvedHoraeBin = candidateBins[root.probeIndex]
+        root.refreshPomo()
+        root.refreshTasks()
+      } else {
+        root.probeIndex++
+        root.testNextCandidate()
+      }
+    }
+  }
+
   property bool tasksRefreshPending: false
   property bool pomoRefreshPending: false
 
   function refreshTasks() {
+    if (!root.horaeInstalled) return
     if (tasksProc.running) {
       tasksRefreshPending = true
       return
@@ -2367,6 +2726,7 @@ BarWidget {
   // Re-parse pomo.json (kept warm in pomoWatcher); fall back to the horae
   // process only when the file is missing.
   function refreshPomo() {
+    if (!root.horaeInstalled) return
     var raw = typeof pomoWatcher.text === "function" ? pomoWatcher.text() : String(pomoWatcher.text || "")
     if (raw && raw.trim() !== "") {
       applyPomoFile(raw)
@@ -2381,8 +2741,7 @@ BarWidget {
   }
 
   Component.onCompleted: {
-    root.refreshPomo()
-    root.refreshTasks()
+    root.startProbe()
   }
 
   Process {
@@ -2392,7 +2751,10 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.applyTasks(text)
     }
-    onExited: {
+    onExited: function(exitCode) {
+      if (exitCode === 127) {
+        root.horaeInstalled = false
+      }
       if (root.tasksRefreshPending) {
         root.tasksRefreshPending = false
         refreshTimer.restart()
@@ -2407,7 +2769,10 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.applyPomo(text)
     }
-    onExited: {
+    onExited: function(exitCode) {
+      if (exitCode === 127) {
+        root.horaeInstalled = false
+      }
       if (root.pomoRefreshPending) {
         root.pomoRefreshPending = false
         pomoRefreshTimer.restart()

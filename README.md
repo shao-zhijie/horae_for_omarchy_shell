@@ -42,7 +42,17 @@ An elegant, lightweight, and blazingly fast [Omarchy](https://omarchy.org/) Quat
 
 ## Installation & Setup
 
-### Method 1: Automated Setup Script (Recommended)
+### Method 1: Standard Omarchy Plugin Add (Recommended)
+
+Install directly using Omarchy's official plugin command:
+
+```bash
+omarchy plugin add https://github.com/zhaohang1205/horae_for_omarchy_shell.git --enable
+```
+
+> **First-Run Setup Wizard**: The plugin features an integrated setup wizard. If the `horae` CLI engine is not yet detected on your system, the status bar capsule will guide you with a one-click terminal installer or manual command copy.
+
+### Method 2: Automated Local Setup Script
 
 Clone the repository and run the included `install.sh` script to automatically link the plugin, enable it in the center section, and inject recommended defaults (`maxWidth: 420`, `autoDismiss: 15`):
 
@@ -50,12 +60,6 @@ Clone the repository and run the included `install.sh` script to automatically l
 git clone https://github.com/zhaohang1205/horae_for_omarchy_shell.git
 cd horae_for_omarchy_shell
 ./install.sh
-```
-
-### Method 2: Standard Omarchy Plugin Add
-
-```bash
-omarchy plugin add https://github.com/zhaohang1205/horae_for_omarchy_shell.git --enable
 ```
 
 > **Note**: An auto-dismiss timeout of 15 seconds (`autoDismiss: 15`) is built-in by default upon installation. To explicitly persist configuration options into `~/.config/omarchy/shell.json`, run:
