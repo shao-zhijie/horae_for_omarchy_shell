@@ -2688,7 +2688,7 @@ BarWidget {
     id: probeHoraeProc
     stdout: StdioCollector {
       waitForEnd: true
-      onStreamFinished: function(text) {
+      onStreamFinished: {
         var trimmed = text.trim()
         if (trimmed.indexOf("horae") !== -1) {
           root.horaeInstalled = true
